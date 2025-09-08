@@ -249,7 +249,7 @@ export const useContract = () => {
         protocolData.currentPrice = currentPrice.toString()
       } catch (err) {
         // Set a default price if DEX has no liquidity
-        protocolData.currentPrice = '500000000000000000000000' // 500k ORACLE per ETH as fallback
+        protocolData.currentPrice = '500000000000000000000000' // 500k ORACLE per TTRUST as fallback
       }
 
       // Update user lending position
@@ -306,7 +306,7 @@ export const useContract = () => {
   // Real contract functions
 
   /**
-   * Add ETH collateral to the lending protocol
+   * Add TTRUST collateral to the lending protocol
    */
   const addCollateral = useCallback(async (amount: string) => {
     if (!oracleLendContract || !signer) {
@@ -344,7 +344,7 @@ export const useContract = () => {
   }, [oracleLendContract, signer, fetchContractData])
 
   /**
-   * Withdraw ETH collateral from the lending protocol
+   * Withdraw TTRUST collateral from the lending protocol
    */
   const withdrawCollateral = useCallback(async (amount: string) => {
     if (!oracleLendContract || !signer) {
@@ -382,7 +382,7 @@ export const useContract = () => {
   }, [oracleLendContract, signer, fetchContractData])
 
   /**
-   * Borrow ORACLE tokens against ETH collateral
+   * Borrow ORACLE tokens against TTRUST collateral
    */
   const borrowOracle = useCallback(async (amount: string) => {
     if (!oracleLendContract || !signer) {
@@ -558,14 +558,14 @@ export const useContract = () => {
     if (token === 'tTRUST') {
       return addCollateral(amount)
     }
-    return { success: false, error: 'Only ETH collateral is supported in the new protocol' }
+    return { success: false, error: 'Only TTRUST collateral is supported in the new protocol' }
   }, [addCollateral])
 
   const withdraw = useCallback(async (token: string, amount: string) => {
     if (token === 'tTRUST') {
       return withdrawCollateral(amount)
     }
-    return { success: false, error: 'Only ETH collateral withdrawal is supported' }
+    return { success: false, error: 'Only TTRUST collateral withdrawal is supported' }
   }, [withdrawCollateral])
 
   const borrow = useCallback(async (token: string, amount: string) => {

@@ -13,7 +13,7 @@ export interface TokenBalance {
 
 // New lending protocol types
 export interface UserLendingPosition {
-  // ETH collateral (in wei)
+  // TTRUST collateral (in wei)
   collateral: string
   // ORACLE debt (in 18 decimals)
   borrowed: string
@@ -32,9 +32,9 @@ export interface UserLendingPosition {
 export interface LendingProtocolStats {
   // Contract balances
   oracleBalance: string // Available ORACLE for borrowing
-  ethBalance: string // Total ETH collateral
+  ethBalance: string // Total TTRUST collateral
   // Current price from DEX
-  currentPrice: string // ORACLE per 1 ETH
+  currentPrice: string // ORACLE per 1 TTRUST
   // Protocol totals
   totalCollateral: string
   totalBorrowed: string
