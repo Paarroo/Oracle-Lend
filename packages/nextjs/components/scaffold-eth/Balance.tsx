@@ -13,7 +13,7 @@ type BalanceProps = {
 };
 
 /**
- * Display (ETH & USD) balance of an ETH address.
+ * Display (native token & USD) balance of a wallet address.
  */
 export const Balance = ({ address, className = "", usdMode }: BalanceProps) => {
   const { targetNetwork } = useTargetNetwork();

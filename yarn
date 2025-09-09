@@ -1,0 +1,6 @@
+#!/bin/bash
+# Script wrapper pour utiliser Yarn 3.2.3 avec Mise dans Oracle-Lend-UI
+export MISE_SHELL=zsh
+export MISE_CWD=/Users/toto/Desktop/THP/Oracle-Lend-UI
+cd /Users/toto/Desktop/THP/Oracle-Lend-UI
+/Users/toto/.local/share/mise/installs/yarn/3.2.3/bin/yarn "$@"

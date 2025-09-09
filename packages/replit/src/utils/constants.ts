@@ -55,7 +55,7 @@ export const TOKENS = {
 // Protocol constants
 export const PROTOCOL_CONFIG = {
   name: 'ORACLE LEND',
-  description: 'Over-collateralized lending protocol on Intuition testnet. Deposit ETH as collateral, borrow ORACLE tokens. Based on SpeedRunEthereum challenge with DEX-based price oracle.',
+  description: 'Over-collateralized lending protocol on Intuition testnet. Deposit TTRUST as collateral, borrow ORACLE tokens. Based on SpeedRunEthereum challenge with DEX-based price oracle.',
   
   // Lending Protocol Configuration (SpeedRunEthereum model)
   collateralRatio: 120, // 120% collateralization required (over-collateralized)
@@ -224,8 +224,8 @@ export const SUCCESS_MESSAGES = {
   TOKENS_APPROVED: 'Tokens approved successfully',
   
   // Lending-specific success messages
-  COLLATERAL_ADDED: 'ETH collateral added successfully',
-  COLLATERAL_WITHDRAWN: 'ETH collateral withdrawn successfully',
+  COLLATERAL_ADDED: 'TTRUST collateral added successfully',
+  COLLATERAL_WITHDRAWN: 'TTRUST collateral withdrawn successfully',
   BORROW_SUCCESS: 'ORACLE tokens borrowed successfully',
   REPAY_SUCCESS: 'ORACLE debt repaid successfully',
   LIQUIDATION_SUCCESS: 'Position liquidated successfully - bonus earned!',
@@ -239,7 +239,7 @@ export const SUCCESS_MESSAGES = {
 // Feature flags
 export const FEATURES = {
   enableAnalytics: true,
-  enableLending: true, // ETH collateral deposits/withdrawals
+  enableLending: true, // TTRUST collateral deposits/withdrawals
   enableBorrowing: true, // ORACLE token borrowing/repaying
   enableSwap: true, // DEX token swapping
   enableLiquidation: true, // Liquidation of unsafe positions (now enabled!)
@@ -353,8 +353,8 @@ export const NETWORK_STATUS = {
 // Transaction types
 export const TRANSACTION_TYPES = {
   // Lending Protocol (OracleLend contract)
-  ADD_COLLATERAL: 'addCollateral', // addCollateral() - deposit ETH
-  WITHDRAW_COLLATERAL: 'withdrawCollateral', // withdrawCollateral() - withdraw ETH
+  ADD_COLLATERAL: 'addCollateral', // addCollateral() - deposit TTRUST
+  WITHDRAW_COLLATERAL: 'withdrawCollateral', // withdrawCollateral() - withdraw TTRUST
   BORROW_ORACLE: 'borrowOracle', // borrowOracle() - borrow ORACLE tokens
   REPAY_ORACLE: 'repayOracle', // repayOracle() - repay ORACLE debt
   LIQUIDATE: 'liquidate', // liquidate() - liquidate unsafe position
@@ -397,7 +397,7 @@ export const DEFAULTS = {
   tableSortOrder: 'desc',
   
   // Lending defaults
-  minCollateralETH: '0.01', // Minimum 0.01 ETH collateral
+  minCollateralTTRUST: '0.01', // Minimum 0.01 TTRUST collateral
   minBorrowORACLE: '1', // Minimum 1 ORACLE token borrow
   healthFactorRefreshInterval: 10000, // 10 seconds
   priceRefreshInterval: 5000, // 5 seconds for price updates

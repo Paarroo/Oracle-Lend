@@ -124,7 +124,7 @@ const LiquidationExplainer: React.FC<LiquidationExplainerProps> = ({
             </p>
             <p>
               <strong>As a liquidator,</strong> you repay the borrower's debt using ORACLE tokens and receive 
-              their ETH collateral plus a 10% bonus as reward.
+              their TTRUST collateral plus a 10% bonus as reward.
             </p>
             <p>
               <strong>Requirements:</strong> You must have enough ORACLE tokens to cover the full debt amount.
@@ -243,7 +243,7 @@ const LiquidationExplainer: React.FC<LiquidationExplainerProps> = ({
             <h3 className="text-lg font-semibold text-white mb-3">💰 Liquidation Rewards</h3>
             <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-4 space-y-2">
               <div className="flex justify-between">
-                <span className="text-gray-300">ETH Collateral:</span>
+                <span className="text-gray-300">TTRUST Collateral:</span>
                 <div className="flex items-center space-x-2">
                   <TokenIcon token="tTRUST" size="sm" />
                   <span className="text-white font-semibold">
@@ -289,8 +289,15 @@ const LiquidationExplainer: React.FC<LiquidationExplainerProps> = ({
                   <div className="flex items-center space-x-2">
                     <input
                       type="number"
+                      min="0"
+                      step="any"
                       value={mintAmount}
-                      onChange={(e) => setMintAmount(e.target.value)}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        if (value === '' || parseFloat(value) >= 0) {
+                          setMintAmount(value)
+                        }
+                      }}
                       placeholder="Amount to mint"
                       className="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
                     />
@@ -308,7 +315,7 @@ const LiquidationExplainer: React.FC<LiquidationExplainerProps> = ({
                   <p>💡 Ways to get ORACLE tokens:</p>
                   <ul className="list-disc list-inside space-y-1 ml-4">
                     <li>🔄 Swap TTRUST for ORACLE on the DEX</li>
-                    <li>💰 Borrow ORACLE using ETH as collateral</li>
+                    <li>💰 Borrow ORACLE using TTRUST as collateral</li>
                     <li>🎁 Receive transfer from another user</li>
                   </ul>
                 </div>
