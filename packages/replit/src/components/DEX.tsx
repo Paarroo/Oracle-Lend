@@ -57,21 +57,45 @@ const DEX_INTUIT_ABI = [
   'function swapTrustForIntuit(uint256 _amountIn, uint256 _minAmountOut) external payable',
   'function swapIntuitForTrust(uint256 _amountIn, uint256 _minAmountOut) external',
   'function getAmountOut(address _tokenIn, uint256 _amountIn) external view returns (uint256 amountOut)',
-  'function getDEXStats() external view returns (uint256 _tTrustReserve, uint256 _intuitReserve, uint256 _totalVolume, uint256 _totalTrades, uint256 _totalLiquidity)'
+  'function getPrice(address _token) external view returns (uint256 price)',
+  'function getDEXStats() external view returns (uint256 _tTrustReserve, uint256 _intuitReserve, uint256 _totalVolume, uint256 _totalTrades, uint256 _totalLiquidity)',
+  'function tTrustReserve() external view returns (uint256)',
+  'function intuitReserve() external view returns (uint256)',
+  'function totalSupply() external view returns (uint256)',
+  'function FEE_RATE() external view returns (uint256)'
 ]
 
 const DEX_TSWP_ABI = [
   'function swapTrustForTswp(uint256 _amountIn, uint256 _minAmountOut) external payable',
   'function swapTswpForTrust(uint256 _amountIn, uint256 _minAmountOut) external',
   'function getAmountOut(address _tokenIn, uint256 _amountIn) external view returns (uint256 amountOut)',
-  'function getDEXStats() external view returns (uint256 _tTrustReserve, uint256 _tswpReserve, uint256 _totalVolume, uint256 _totalTrades, uint256 _totalLiquidity)'
+  'function getPrice(address _token) external view returns (uint256 price)',
+  'function getDEXStats() external view returns (uint256 _tTrustReserve, uint256 _tswpReserve, uint256 _totalVolume, uint256 _totalTrades, uint256 _totalLiquidity)',
+  'function tTrustReserve() external view returns (uint256)',
+  'function tswpReserve() external view returns (uint256)',
+  'function totalSupply() external view returns (uint256)',
+  'function FEE_RATE() external view returns (uint256)'
 ]
 
 const DEX_PINTU_ABI = [
   'function swapTrustForPintu(uint256 _amountIn, uint256 _minAmountOut) external payable',
   'function swapPintuForTrust(uint256 _amountIn, uint256 _minAmountOut) external',
   'function getAmountOut(address _tokenIn, uint256 _amountIn) external view returns (uint256 amountOut)',
-  'function getDEXStats() external view returns (uint256 _tTrustReserve, uint256 _pintuReserve, uint256 _totalVolume, uint256 _totalTrades, uint256 _totalLiquidity)'
+  'function getPrice(address _token) external view returns (uint256 price)',
+  'function getDEXStats() external view returns (uint256 _tTrustReserve, uint256 _pintuReserve, uint256 _totalVolume, uint256 _totalTrades, uint256 _totalLiquidity)',
+  'function tTrustReserve() external view returns (uint256)',
+  'function pintuReserve() external view returns (uint256)',
+  'function totalSupply() external view returns (uint256)',
+  'function FEE_RATE() external view returns (uint256)'
+]
+
+// DEXRouter ABI - for multi-hop swaps between any token pairs
+const DEX_ROUTER_ABI = [
+  'function calculateMultiHopOutput(address tokenIn, address tokenOut, uint256 amountIn) external view returns (uint256 amountOut, address[] memory path)',
+  'function swap(address tokenIn, address tokenOut, uint256 amountIn, uint256 minAmountOut) external payable returns (uint256 amountOut)',
+  'function getDEXForPair(address tokenA, address tokenB) external view returns (address dex)',
+  'function getAggregatedPrice(address token) external view returns (uint256 price)',
+  'function getRouterStats() external view returns (uint256 totalVolume, uint256 totalTrades, uint256 activePairs)'
 ]
 
 // ERC20 Token ABI - for all tokens (ORACLE, INTUIT, TSWP, PINTU)
@@ -82,11 +106,454 @@ const ERC20_TOKEN_ABI = [
   'function allowance(address owner, address spender) external view returns (uint256)'
 ]
 
+// Utility function to format large numbers responsively
+const formatLargeNumber = (value: string | number, token: string = '', breakpoint: 'mobile' | 'desktop' = 'desktop'): string => {
+  const num = typeof value === 'string' ? parseFloat(value) : value
+
+  if (isNaN(num) || num === 0) return '0'
+
+  // For desktop, show more precision
+  if (breakpoint === 'desktop') {
+    if (num >= 1000000) {
+      return `${(num / 1000000).toFixed(2)}M ${token}`.trim()
+    } else if (num >= 1000) {
+      return `${(num / 1000).toFixed(1)}K ${token}`.trim()
+    } else {
+      return `${num.toLocaleString('en-US', { maximumFractionDigits: 4 })} ${token}`.trim()
+    }
+  }
+
+  // For mobile, more aggressive truncation
+  if (num >= 1000000) {
+    return `${(num / 1000000).toFixed(1)}M`
+  } else if (num >= 1000) {
+    return `${(num / 1000).toFixed(0)}K`
+  } else if (num >= 1) {
+    return num.toFixed(1)
+  } else {
+    return num.toFixed(4)
+  }
+}
+
+// Utility function to truncate routes for mobile
+const formatRoute = (route: string, breakpoint: 'mobile' | 'desktop' = 'desktop'): string => {
+  if (breakpoint === 'mobile') {
+    // Simplify long routes for mobile
+    return route
+      .replace('ORACLE', 'ORC')
+      .replace('tTRUST', 'TTR')
+      .replace('INTUIT', 'INT')
+      .replace('TSWP', 'TSP')
+      .replace('PINTU', 'PIN')
+      .replace(' (erreur)', '')
+  }
+  return route
+}
+
+// Utility function to truncate addresses responsively
+const formatAddress = (address: string, breakpoint: 'mobile' | 'desktop' = 'desktop'): string => {
+  if (!address || address.length < 10) return address
+
+  if (breakpoint === 'mobile') {
+    return `${address.slice(0, 6)}...${address.slice(-4)}`
+  }
+  return `${address.slice(0, 10)}...${address.slice(-6)}`
+}
+
+// Diagnostic function to test DEX contract existence and functionality
+const testDEXContract = async (contractAddress: string, contractName: string, provider: any): Promise<{
+  exists: boolean,
+  hasCode: boolean,
+  liquidityCheck: { tTrust: string, otherToken: string } | null,
+  getAmountOutWorks: boolean,
+  error?: string
+}> => {
+  try {
+    console.log(`🔍 Testing ${contractName} at ${contractAddress}...`)
+
+    // Check if contract exists (has code)
+    const code = await provider.getCode(contractAddress)
+    const hasCode = code !== '0x'
+
+    if (!hasCode) {
+      console.log(`❌ ${contractName}: No contract code at address`)
+      return { exists: false, hasCode: false, liquidityCheck: null, getAmountOutWorks: false, error: 'No contract code' }
+    }
+
+    console.log(`✅ ${contractName}: Contract exists`)
+
+    // Try to get contract instance and test basic functions
+    let liquidityCheck = null
+    let getAmountOutWorks = false
+
+    try {
+      const contract = new ethers.Contract(contractAddress, DEX_ABI, provider)
+
+      // Test liquidity reserves
+      const tTrustReserve = await contract.tTrustReserve()
+      console.log(`📊 ${contractName}: tTrustReserve = ${ethers.formatEther(tTrustReserve)}`)
+
+      // For ORACLE DEX, check oracleReserve, for others check specific token reserve
+      let otherTokenReserve = '0'
+      if (contractName.includes('ORACLE')) {
+        otherTokenReserve = await contract.oracleReserve()
+      } else if (contractName.includes('INTUIT')) {
+        const intuitContract = new ethers.Contract(contractAddress, DEX_INTUIT_ABI, provider)
+        otherTokenReserve = await intuitContract.intuitReserve()
+      } else if (contractName.includes('TSWP')) {
+        const tswpContract = new ethers.Contract(contractAddress, DEX_TSWP_ABI, provider)
+        otherTokenReserve = await tswpContract.tswpReserve()
+      } else if (contractName.includes('PINTU')) {
+        const pintuContract = new ethers.Contract(contractAddress, DEX_PINTU_ABI, provider)
+        otherTokenReserve = await pintuContract.pintuReserve()
+      }
+
+      liquidityCheck = {
+        tTrust: ethers.formatEther(tTrustReserve),
+        otherToken: ethers.formatEther(otherTokenReserve)
+      }
+
+      console.log(`💧 ${contractName}: Liquidity - tTRUST: ${liquidityCheck.tTrust}, Other: ${liquidityCheck.otherToken}`)
+
+      // Test getAmountOut with different tTRUST address patterns
+      const testAmount = ethers.parseEther('1') // 1 tTRUST
+      const addressesToTry = [
+        '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', // Our current address
+        '0x0000000000000000000000000000000000000000', // address(0)
+        '0x0000000000000000000000000000000000000001'  // address(1)
+      ]
+
+      for (const testAddress of addressesToTry) {
+        try {
+          const amountOut = await contract.getAmountOut(testAddress, testAmount)
+          console.log(`✅ ${contractName}: getAmountOut works with ${testAddress} = ${ethers.formatEther(amountOut)}`)
+          getAmountOutWorks = true
+          break
+        } catch (testError) {
+          console.log(`❌ ${contractName}: getAmountOut failed with ${testAddress}:`, testError.message)
+        }
+      }
+
+    } catch (contractError) {
+      console.log(`❌ ${contractName}: Contract function calls failed:`, contractError.message)
+      return {
+        exists: true,
+        hasCode: true,
+        liquidityCheck,
+        getAmountOutWorks: false,
+        error: contractError.message
+      }
+    }
+
+    return { exists: true, hasCode: true, liquidityCheck, getAmountOutWorks }
+
+  } catch (error) {
+    console.log(`❌ ${contractName}: Test failed:`, error.message)
+    return { exists: false, hasCode: false, liquidityCheck: null, getAmountOutWorks: false, error: error.message }
+  }
+}
+
+// Function to calculate AMM quote locally using Scaffold-ETH pattern
+const calculateAMMQuote = (
+  inputAmount: string,
+  inputReserve: string,
+  outputReserve: string,
+  feeRate: number = 0.003 // 0.3% fee like Scaffold-ETH
+): string => {
+  try {
+    const input = parseFloat(inputAmount)
+    const reserveIn = parseFloat(inputReserve)
+    const reserveOut = parseFloat(outputReserve)
+
+    if (input <= 0 || reserveIn <= 0 || reserveOut <= 0) {
+      return '0'
+    }
+
+    // Scaffold-ETH AMM formula: output = (input * 997 * outputReserve) / (inputReserve * 1000 + input * 997)
+    // This accounts for 0.3% fee (997/1000 = 99.7%)
+    const inputWithFee = input * (1 - feeRate)
+    const numerator = inputWithFee * reserveOut
+    const denominator = reserveIn + inputWithFee
+
+    const output = numerator / denominator
+
+    console.log('🧮 AMM Calculation:', {
+      input,
+      inputReserve: reserveIn,
+      outputReserve: reserveOut,
+      feeRate: `${feeRate * 100}%`,
+      output
+    })
+
+    return output.toString()
+  } catch (error) {
+    console.error('❌ AMM calculation failed:', error)
+    return '0'
+  }
+}
+
+// Function to run comprehensive DEX diagnostics with Scaffold-ETH pattern testing
+// PHASE 1: DIAGNOSTIC FONDAMENTAL - Test réalité vs suppositions
+const runDEXDiagnostics = async (): Promise<void> => {
+  if (!window.ethereum) {
+    console.log('❌ No ethereum provider available')
+    return
+  }
+
+  try {
+    const provider = new ethers.BrowserProvider(window.ethereum)
+
+    console.log('🔍 PHASE 1: DIAGNOSTIC FONDAMENTAL DES CONTRATS')
+    console.log('='.repeat(60))
+    console.log('📋 Objectif: Tester la réalité vs suppositions du code')
+    console.log('')
+
+    // RÉELLES adresses des contrats depuis les constantes
+    const REAL_CONTRACTS = {
+      DEX_ORACLE: CONTRACTS.DEX,
+      DEX_INTUIT: CONTRACTS.DEX_INTUIT,
+      DEX_TSWP: CONTRACTS.DEX_TSWP,
+      DEX_PINTU: CONTRACTS.DEX_PINTU,
+      DEX_ROUTER: CONTRACTS.DEXRouter
+    }
+
+    // ÉTAPE 1: Vérifier l'existence des contrats
+    console.log('📋 ÉTAPE 1: VÉRIFICATION D\'EXISTENCE DES CONTRATS')
+    console.log('-'.repeat(50))
+
+    const contractResults = {}
+
+    for (const [name, address] of Object.entries(REAL_CONTRACTS)) {
+      console.log(`🧪 Test ${name}: ${address}`)
+
+      try {
+        const code = await provider.getCode(address)
+        const exists = code !== '0x'
+
+        contractResults[name] = {
+          address,
+          exists,
+          codeSize: code.length,
+          functions: []
+        }
+
+        if (exists) {
+          console.log(`  ✅ Contrat existe (${code.length} chars de bytecode)`)
+        } else {
+          console.log(`  ❌ Aucun contrat déployé`)
+        }
+      } catch (error) {
+        console.log(`  ❌ Erreur: ${error.message}`)
+        contractResults[name] = {
+          address,
+          exists: false,
+          error: error.message
+        }
+      }
+    }
+
+    console.log('')
+
+    // ÉTAPE 2: Tester fonctions supposées vs réalité pour contrats existants
+    console.log('📋 ÉTAPE 2: TEST DES FONCTIONS SUPPOSÉES')
+    console.log('-'.repeat(50))
+
+    const SUPPOSED_FUNCTIONS = {
+      DEX_ORACLE: ['swapTrustForOracle', 'swapOracleForTrust', 'getAmountOut', 'tTrustReserve', 'oracleReserve'],
+      DEX_INTUIT: ['swapTrustForIntuit', 'swapIntuitForTrust', 'getAmountOut', 'tTrustReserve', 'intuitReserve'],
+      DEX_TSWP: ['swapTrustForTswp', 'swapTswpForTrust', 'getAmountOut', 'tTrustReserve', 'tswpReserve'],
+      DEX_PINTU: ['swapTrustForPintu', 'swapPintuForTrust', 'getAmountOut', 'tTrustReserve', 'pintuReserve'],
+      DEX_ROUTER: ['calculateMultiHopOutput', 'swap', 'getDEXForPair']
+    }
+
+    for (const [contractName, info] of Object.entries(contractResults)) {
+      if (!info.exists) {
+        console.log(`⏭️ Skip ${contractName}: Contrat n'existe pas`)
+        continue
+      }
+
+      console.log(`🔧 Test des fonctions supposées pour ${contractName}:`)
+
+      const supposedFunctions = SUPPOSED_FUNCTIONS[contractName] || []
+      const workingFunctions = []
+      const failedFunctions = []
+
+      for (const funcName of supposedFunctions) {
+        try {
+          // Test basique avec l'ABI correspondante du code actuel
+          const currentABI = contractName === 'DEX_ORACLE' ? DEX_ABI :
+                           contractName === 'DEX_INTUIT' ? DEX_INTUIT_ABI :
+                           contractName === 'DEX_TSWP' ? DEX_TSWP_ABI :
+                           contractName === 'DEX_PINTU' ? DEX_PINTU_ABI :
+                           DEX_ROUTER_ABI
+
+          const contract = new ethers.Contract(info.address, currentABI, provider)
+
+          // Vérifier si la fonction existe dans l'interface
+          const funcFragment = contract.interface.getFunction(funcName)
+          if (funcFragment) {
+            // Fonction existe dans l'ABI - maintenant tester si elle fonctionne vraiment
+            try {
+              if (funcName.includes('Reserve')) {
+                // Test view functions qui retournent des reserves
+                const result = await contract[funcName]()
+                workingFunctions.push(`${funcName}() -> ${ethers.formatEther(result)} ETH`)
+              } else if (funcName === 'getAmountOut') {
+                // Test spécial pour getAmountOut avec différents patterns
+                try {
+                  const result = await contract[funcName](TOKENS.tTRUST.address, ethers.parseEther('1'))
+                  workingFunctions.push(`${funcName}(address,uint256) -> ${ethers.formatEther(result)} ETH`)
+                } catch {
+                  try {
+                    const result = await contract[funcName](ethers.parseEther('1'), ethers.parseEther('1000'), ethers.parseEther('500000'))
+                    workingFunctions.push(`${funcName}(uint256,uint256,uint256) -> ${ethers.formatEther(result)} ETH`)
+                  } catch {
+                    failedFunctions.push(`${funcName}() - params incorrects`)
+                  }
+                }
+              } else {
+                // Pour swap functions, juste vérifier que la signature existe
+                workingFunctions.push(`${funcName}() - signature existe`)
+              }
+            } catch (callError) {
+              failedFunctions.push(`${funcName}() - existe mais échec: ${callError.message.substring(0, 30)}...`)
+            }
+          } else {
+            failedFunctions.push(`${funcName}() - n'existe pas dans l'ABI`)
+          }
+        } catch (error) {
+          failedFunctions.push(`${funcName}() - erreur ABI: ${error.message.substring(0, 30)}...`)
+        }
+      }
+
+      if (workingFunctions.length > 0) {
+        console.log(`  ✅ Fonctions qui marchent (${workingFunctions.length}):`)
+        workingFunctions.forEach(func => console.log(`    - ${func}`))
+      }
+
+      if (failedFunctions.length > 0) {
+        console.log(`  ❌ Fonctions qui échouent (${failedFunctions.length}):`)
+        failedFunctions.forEach(func => console.log(`    - ${func}`))
+      }
+
+      contractResults[contractName].workingFunctions = workingFunctions
+      contractResults[contractName].failedFunctions = failedFunctions
+      console.log('')
+    }
+
+    // ÉTAPE 3: Test des patterns d'adresses tTRUST
+    console.log('📋 ÉTAPE 3: TEST DES PATTERNS D\'ADRESSES tTRUST')
+    console.log('-'.repeat(50))
+
+    const tTrustPatterns = [
+      { name: 'Current (0xEee...eE)', address: TOKENS.tTRUST.address },
+      { name: 'Zero (0x000...000)', address: '0x0000000000000000000000000000000000000000' },
+      { name: 'One (0x000...001)', address: '0x0000000000000000000000000000000000000001' }
+    ]
+
+    // Test avec DEX_ORACLE s'il existe
+    if (contractResults.DEX_ORACLE?.exists) {
+      console.log('🧪 Test patterns avec DEX_ORACLE:')
+      try {
+        const contract = new ethers.Contract(contractResults.DEX_ORACLE.address, DEX_ABI, provider)
+
+        for (const pattern of tTrustPatterns) {
+          try {
+            const result = await contract.getAmountOut(pattern.address, ethers.parseEther('1'))
+            console.log(`  ✅ ${pattern.name}: ${pattern.address} -> ${ethers.formatEther(result)} tokens`)
+          } catch (error) {
+            console.log(`  ❌ ${pattern.name}: ${pattern.address} -> ${error.message.substring(0, 50)}...`)
+          }
+        }
+      } catch (error) {
+        console.log(`  ❌ Erreur générale: ${error.message}`)
+      }
+    } else {
+      console.log('⚠️ DEX_ORACLE n\'existe pas, impossible de tester les patterns tTRUST')
+    }
+
+    console.log('')
+
+    // RÉSUMÉ FINAL ET RECOMMANDATIONS
+    console.log('📊 RÉSUMÉ DU DIAGNOSTIC')
+    console.log('='.repeat(60))
+
+    const existingContracts = Object.entries(contractResults).filter(([name, info]) => info.exists)
+    const missingContracts = Object.entries(contractResults).filter(([name, info]) => !info.exists)
+
+    console.log(`✅ Contrats existants (${existingContracts.length}/5):`)
+    existingContracts.forEach(([name, info]) => {
+      const workingCount = info.workingFunctions?.length || 0
+      const failedCount = info.failedFunctions?.length || 0
+      console.log(`  - ${name}: ${info.address}`)
+      console.log(`    📊 ${workingCount} fonctions OK, ${failedCount} fonctions KO`)
+    })
+
+    if (missingContracts.length > 0) {
+      console.log(`❌ Contrats manquants (${missingContracts.length}/5):`)
+      missingContracts.forEach(([name, info]) => {
+        console.log(`  - ${name}: ${info.address}`)
+      })
+    }
+
+    console.log('')
+    console.log('🎯 RECOMMANDATIONS IMMÉDIATES:')
+
+    if (existingContracts.length === 0) {
+      console.log('❌ CRITIQUE: Aucun contrat n\'existe - Vérifier réseau et adresses')
+    } else {
+      console.log(`✅ ${existingContracts.length}/5 contrats existent`)
+
+      // Analyse des fonctions qui marchent
+      const totalWorkingFunctions = existingContracts.reduce((sum, [name, info]) => sum + (info.workingFunctions?.length || 0), 0)
+
+      if (totalWorkingFunctions === 0) {
+        console.log('❌ PROBLÈME: Aucune fonction supposée ne fonctionne')
+        console.log('   → Les ABIs dans le code sont probablement incorrectes')
+        console.log('   → PHASE 2: Analyser le bytecode pour découvrir les vraies signatures')
+      } else {
+        console.log(`✅ ${totalWorkingFunctions} fonctions fonctionnent`)
+        console.log('   → Problème partiel - certaines ABIs sont correctes')
+        console.log('   → PHASE 2: Se concentrer sur les contrats/fonctions qui marchent')
+
+        // Identifier le meilleur candidat pour commencer
+        const bestContract = existingContracts.reduce((best, [name, info]) => {
+          const workingCount = info.workingFunctions?.length || 0
+          const bestCount = best[1]?.workingFunctions?.length || 0
+          return workingCount > bestCount ? [name, info] : best
+        }, [null, null])
+
+        if (bestContract[0]) {
+          console.log(`   → PRIORITÉ: Commencer avec ${bestContract[0]} (${bestContract[1].workingFunctions?.length} fonctions OK)`)
+        }
+      }
+    }
+
+    console.log('')
+    console.log('📋 Action suivante: PHASE 2 - Adapter le code selon ces résultats')
+
+    // Sauvegarder les résultats pour les phases suivantes
+    ;(window as any).diagnosticResults = contractResults
+
+  } catch (error) {
+    console.error('❌ ERREUR FATALE dans le diagnostic:', error)
+  }
+}
+
 // Utility functions to determine correct DEX contract and methods
 const getDEXContractInfo = (fromToken: TokenSymbol, toToken: TokenSymbol) => {
-  // Always ensure tTRUST is one of the tokens (all pairs are with tTRUST)
+  // Check if this is a direct pair (includes tTRUST) or requires multi-hop routing
   if (fromToken !== 'tTRUST' && toToken !== 'tTRUST') {
-    throw new Error('All swaps must include tTRUST as one of the tokens')
+    // Return multi-hop routing info for non-tTRUST pairs
+    return {
+      isMultiHop: true,
+      contractAddress: CONTRACTS.DEXRouter,
+      abi: DEX_ROUTER_ABI,
+      intermediateToken: 'tTRUST',
+      fromToken,
+      toToken,
+      error: null
+    }
   }
 
   // Determine the non-tTRUST token
@@ -95,38 +562,64 @@ const getDEXContractInfo = (fromToken: TokenSymbol, toToken: TokenSymbol) => {
   switch (otherToken) {
     case 'ORACLE':
       return {
+        isMultiHop: false,
         contractAddress: CONTRACTS.DEX,
         abi: DEX_ABI,
         swapToTokenFunction: 'swapTrustForOracle',
         swapFromTokenFunction: 'swapOracleForTrust',
-        tokenContract: CONTRACTS.OracleToken
+        tokenContract: CONTRACTS.OracleToken,
+        fromToken,
+        toToken,
+        error: null
       }
     case 'INTUIT':
       return {
+        isMultiHop: false,
         contractAddress: CONTRACTS.DEX_INTUIT,
         abi: DEX_INTUIT_ABI,
         swapToTokenFunction: 'swapTrustForIntuit',
         swapFromTokenFunction: 'swapIntuitForTrust',
-        tokenContract: CONTRACTS.IntuitToken
+        tokenContract: CONTRACTS.IntuitToken,
+        fromToken,
+        toToken,
+        error: null
       }
     case 'TSWP':
       return {
+        isMultiHop: false,
         contractAddress: CONTRACTS.DEX_TSWP,
         abi: DEX_TSWP_ABI,
         swapToTokenFunction: 'swapTrustForTswp',
         swapFromTokenFunction: 'swapTswpForTrust',
-        tokenContract: CONTRACTS.TswpToken
+        tokenContract: CONTRACTS.TswpToken,
+        fromToken,
+        toToken,
+        error: null
       }
     case 'PINTU':
       return {
+        isMultiHop: false,
         contractAddress: CONTRACTS.DEX_PINTU,
         abi: DEX_PINTU_ABI,
         swapToTokenFunction: 'swapTrustForPintu',
         swapFromTokenFunction: 'swapPintuForTrust',
-        tokenContract: CONTRACTS.PintuToken
+        tokenContract: CONTRACTS.PintuToken,
+        fromToken,
+        toToken,
+        error: null
       }
     default:
-      throw new Error(`Unsupported token: ${otherToken}`)
+      return {
+        isMultiHop: false,
+        contractAddress: '',
+        abi: [],
+        swapToTokenFunction: '',
+        swapFromTokenFunction: '',
+        tokenContract: '',
+        fromToken,
+        toToken,
+        error: `Token non supporté: ${otherToken}`
+      }
   }
 }
 
@@ -146,6 +639,7 @@ const DEX: React.FC = () => {
     PINTU: '0'
   })
   const [quote, setQuote] = useState<SwapQuote | null>(null)
+  const [quoteMethod, setQuoteMethod] = useState<'scaffold-eth' | 'original' | null>(null)
   const [slippage, setSlippage] = useState(0.5) // Default 0.5% (min: 0.1%, max: 10% for security)
   const [showSlippageSettings, setShowSlippageSettings] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -244,7 +738,7 @@ const DEX: React.FC = () => {
 
       for (const [tokenSymbol, contractAddress] of Object.entries(tokenContracts)) {
         try {
-          const tokenContract = new ethers.Contract(contractAddress, ORACLE_TOKEN_ABI, provider)
+          const tokenContract = new ethers.Contract(contractAddress, ERC20_TOKEN_ABI, provider)
           const tokenBalance = await tokenContract.balanceOf(account)
           formattedBalances[tokenSymbol as TokenSymbol] = ethers.formatEther(tokenBalance)
         } catch (tokenError) {
@@ -338,7 +832,138 @@ const DEX: React.FC = () => {
     return undefined
   }, [checkNetwork])
 
-  // Get real quote from appropriate DEX contract
+  // New Scaffold-ETH pattern quote function
+  const getQuoteScaffoldETH = async (): Promise<boolean> => {
+    if (!fromAmount || parseFloat(fromAmount) <= 0 || !window.ethereum || !isCorrectNetwork) {
+      setToAmount('')
+      setQuote(null)
+      return false
+    }
+
+    console.log(`🏗 getQuoteScaffoldETH: Starting quote calculation for ${fromAmount} ${fromToken} → ${toToken}`)
+
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const dexInfo = getDEXContractInfo(fromToken, toToken)
+
+      if (dexInfo.error) {
+        console.warn('❌ getQuoteScaffoldETH: Paire non supportée:', dexInfo.error)
+        setToAmount('')
+        setQuote(null)
+        return false
+      }
+
+      // For direct pairs (includes tTRUST), use Scaffold-ETH approach
+      if (!dexInfo.isMultiHop) {
+        console.log('🏗 getQuoteScaffoldETH: Direct pair, getting reserves...')
+        const dexContract = new ethers.Contract(dexInfo.contractAddress, dexInfo.abi, provider)
+
+        try {
+          // Get reserves directly (Scaffold-ETH pattern)
+          const tTrustReserve = await dexContract.tTrustReserve()
+
+          let otherTokenReserve = '0'
+          const otherToken = fromToken === 'tTRUST' ? toToken : fromToken
+
+          switch (otherToken) {
+            case 'ORACLE':
+              otherTokenReserve = await dexContract.oracleReserve()
+              break
+            case 'INTUIT':
+              otherTokenReserve = await dexContract.intuitReserve()
+              break
+            case 'TSWP':
+              otherTokenReserve = await dexContract.tswpReserve()
+              break
+            case 'PINTU':
+              otherTokenReserve = await dexContract.pintuReserve()
+              break
+          }
+
+          const tTrustReserveFormatted = ethers.formatEther(tTrustReserve)
+          const otherReserveFormatted = ethers.formatEther(otherTokenReserve)
+
+          console.log('🏗 getQuoteScaffoldETH: Reserves:', {
+            tTrustReserve: tTrustReserveFormatted,
+            [`${otherToken}Reserve`]: otherReserveFormatted
+          })
+
+          // Check if reserves are sufficient
+          if (parseFloat(tTrustReserveFormatted) <= 0 || parseFloat(otherReserveFormatted) <= 0) {
+            console.warn('❌ getQuoteScaffoldETH: Insufficient liquidity in reserves')
+            setToAmount('0')
+            setQuote(null)
+            return false
+          }
+
+          // Calculate quote using local AMM formula (Scaffold-ETH pattern)
+          let outputAmount: string
+          if (fromToken === 'tTRUST') {
+            // tTRUST → Token
+            outputAmount = calculateAMMQuote(fromAmount, tTrustReserveFormatted, otherReserveFormatted)
+          } else {
+            // Token → tTRUST
+            outputAmount = calculateAMMQuote(fromAmount, otherReserveFormatted, tTrustReserveFormatted)
+          }
+
+          if (parseFloat(outputAmount) <= 0) {
+            console.warn('❌ getQuoteScaffoldETH: AMM calculation returned 0')
+            setToAmount('0')
+            setQuote(null)
+            return false
+          }
+
+          // Calculate price impact
+          const input = parseFloat(fromAmount)
+          const output = parseFloat(outputAmount)
+          const inputReserve = fromToken === 'tTRUST' ? parseFloat(tTrustReserveFormatted) : parseFloat(otherReserveFormatted)
+          const priceImpact = (input / (inputReserve + input)) * 100
+
+          // Calculate exchange rate
+          const exchangeRate = output / input
+
+          console.log('✅ getQuoteScaffoldETH: Calculation successful:', {
+            input: `${input} ${fromToken}`,
+            output: `${output} ${toToken}`,
+            priceImpact: `${priceImpact.toFixed(2)}%`,
+            exchangeRate
+          })
+
+          setToAmount(outputAmount)
+          setQuote({
+            inputAmount: fromAmount,
+            outputAmount: outputAmount,
+            priceImpact: priceImpact,
+            minimumReceived: (output * (1 - slippage / 100)).toFixed(6),
+            exchangeRate: exchangeRate
+          })
+          setQuoteMethod('scaffold-eth')
+
+          return true
+
+        } catch (error) {
+          console.error('❌ getQuoteScaffoldETH: Error getting reserves or calculating:', error.message)
+          setToAmount('')
+          setQuote(null)
+          return false
+        }
+      }
+
+      // Multi-hop not implemented yet for Scaffold-ETH pattern
+      console.warn('⚠️ getQuoteScaffoldETH: Multi-hop not yet implemented in Scaffold-ETH pattern')
+      setToAmount('')
+      setQuote(null)
+      return false
+
+    } catch (error) {
+      console.error('❌ getQuoteScaffoldETH: Global error:', error.message)
+      setToAmount('')
+      setQuote(null)
+      return false
+    }
+  }
+
+  // Original quote function (fallback)
   const getQuote = async () => {
     if (!fromAmount || parseFloat(fromAmount) <= 0 || !window.ethereum || !isCorrectNetwork) {
       setToAmount('')
@@ -346,29 +971,159 @@ const DEX: React.FC = () => {
       return
     }
 
+    console.log(`🔄 getQuote: Starting quote calculation for ${fromAmount} ${fromToken} → ${toToken}`)
+
     try {
-      // Validate token pair (must include tTRUST)
-      if (fromToken !== 'tTRUST' && toToken !== 'tTRUST') {
-        console.error('All swaps must include tTRUST as one of the tokens')
+      // Get the appropriate DEX contract info
+      const dexInfo = getDEXContractInfo(fromToken, toToken)
+      console.log(`📋 getQuote: DEX Info:`, {
+        isMultiHop: dexInfo.isMultiHop,
+        contractAddress: dexInfo.contractAddress,
+        fromToken,
+        toToken,
+        error: dexInfo.error
+      })
+
+      // Check for errors in dexInfo
+      if (dexInfo.error) {
+        console.warn('❌ getQuote: Paire de tokens non supportée:', dexInfo.error)
         setToAmount('')
         setQuote(null)
         return
       }
 
-      // Get the appropriate DEX contract info
-      const dexInfo = getDEXContractInfo(fromToken, toToken)
+      // For multi-hop swaps, use DEXRouter to calculate real quotes
+      if (dexInfo.isMultiHop) {
+        console.log('🔀 getQuote: Multi-hop swap détecté:', fromToken, '→', toToken)
+        console.log('🔀 getQuote: DEXRouter address:', dexInfo.contractAddress)
+
+        const provider = new ethers.BrowserProvider(window.ethereum)
+        const routerContract = new ethers.Contract(dexInfo.contractAddress, dexInfo.abi, provider)
+
+        const inputAmount = ethers.parseEther(fromAmount)
+        const tokenInAddress = TOKENS[fromToken].address
+        const tokenOutAddress = TOKENS[toToken].address
+
+        console.log('🔀 getQuote: Multi-hop params:', {
+          tokenInAddress,
+          tokenOutAddress,
+          inputAmount: ethers.formatEther(inputAmount)
+        })
+
+        try {
+          // Get multi-hop quote from DEXRouter
+          console.log('🔀 getQuote: Calling calculateMultiHopOutput...')
+          const [amountOut, path] = await routerContract.calculateMultiHopOutput(
+            tokenInAddress,
+            tokenOutAddress,
+            inputAmount
+          )
+
+          console.log('✅ getQuote: Multi-hop calculation successful:', {
+            amountOut: ethers.formatEther(amountOut),
+            path
+          })
+
+          const outputAmount = ethers.formatEther(amountOut)
+
+          // Calculate price impact (estimated based on 2-hop routing)
+          // This is approximate since multi-hop pricing is complex
+          const directRate = 1 // Simplified - would need more complex calculation
+          const actualRate = parseFloat(outputAmount) / parseFloat(fromAmount)
+          const priceImpact = Math.abs((directRate - actualRate) / directRate) * 100
+
+          setToAmount(outputAmount)
+          setQuote({
+            inputAmount: fromAmount,
+            outputAmount: outputAmount,
+            priceImpact: Math.min(priceImpact, 15), // Cap at 15% for display
+            minimumReceived: (parseFloat(outputAmount) * (1 - slippage / 100)).toFixed(6),
+            exchangeRate: actualRate,
+            isMultiHop: true,
+            route: `${fromToken} → tTRUST → ${toToken}`
+          })
+        } catch (error) {
+          console.error('❌ getQuote: Erreur lors du calcul multi-hop:', error.message)
+          setToAmount('0.00')
+          setQuote({
+            inputAmount: fromAmount,
+            outputAmount: '0.00',
+            priceImpact: 0,
+            minimumReceived: '0.00',
+            exchangeRate: 0,
+            isMultiHop: true,
+            route: `${fromToken} → tTRUST → ${toToken} (erreur)`
+          })
+        }
+        return
+      }
+
+      // Direct swap (includes tTRUST)
+      console.log('🔄 getQuote: Direct swap calculation:', fromToken, '→', toToken)
+      console.log('🔄 getQuote: DEX contract address:', dexInfo.contractAddress)
+
       const provider = new ethers.BrowserProvider(window.ethereum)
       const dexContract = new ethers.Contract(dexInfo.contractAddress, dexInfo.abi, provider)
 
       const inputAmount = ethers.parseEther(fromAmount)
 
-      // Use the contract's getAmountOut function for accurate quotes
-      const tokenInAddress = fromToken === 'tTRUST'
-        ? TOKENS.tTRUST.address
-        : TOKENS[fromToken].address
+      // Smart token address resolution for native tokens
+      let tokenInAddress
+      if (fromToken === 'tTRUST') {
+        // Try multiple address patterns for native tTRUST token
+        tokenInAddress = TOKENS.tTRUST.address
+      } else {
+        tokenInAddress = TOKENS[fromToken].address
+      }
 
-      const amountOut = await dexContract.getAmountOut(tokenInAddress, inputAmount)
+      console.log('🔄 getQuote: Direct swap params:', {
+        tokenInAddress,
+        inputAmount: ethers.formatEther(inputAmount),
+        dexAbi: dexInfo.abi.length + ' functions'
+      })
+
+      // Try to get quote with fallback for native token address patterns
+      let amountOut
+      try {
+        console.log('🔄 getQuote: Calling getAmountOut with primary address...')
+        amountOut = await dexContract.getAmountOut(tokenInAddress, inputAmount)
+        console.log('✅ getQuote: Primary getAmountOut successful:', ethers.formatEther(amountOut))
+      } catch (error) {
+        console.warn('❌ getQuote: Premier essai échoué avec', tokenInAddress, '- Tentative avec patterns alternatifs')
+        console.warn('❌ getQuote: Error details:', error.message)
+
+        // If initial address fails and we're dealing with tTRUST, try alternative patterns
+        if (fromToken === 'tTRUST' || toToken === 'tTRUST') {
+          const alternativeAddresses = [
+            '0x0000000000000000000000000000000000000000', // address(0)
+            '0x0000000000000000000000000000000000000001', // address(1)
+            TOKENS.tTRUST.address // Keep current as fallback
+          ]
+
+          for (const altAddress of alternativeAddresses) {
+            try {
+              const testTokenIn = fromToken === 'tTRUST' ? altAddress : TOKENS[fromToken].address
+              console.log(`🔄 getQuote: Trying alternative address: ${altAddress}`)
+              amountOut = await dexContract.getAmountOut(testTokenIn, inputAmount)
+              console.log('✅ getQuote: Succès avec adresse alternative:', altAddress, '=', ethers.formatEther(amountOut))
+              tokenInAddress = testTokenIn
+              break
+            } catch (altError) {
+              console.warn('❌ getQuote: Échec avec adresse alternative:', altAddress, '-', altError.message)
+              continue
+            }
+          }
+        }
+
+        // If all patterns fail, throw the original error
+        if (!amountOut) {
+          console.error('❌ getQuote: All address patterns failed, throwing original error')
+          throw error
+        }
+      }
+
       const outputAmount = ethers.formatEther(amountOut)
+      console.log('✅ getQuote: Direct swap calculation successful:', outputAmount, toToken)
 
       // Get current exchange rate for price impact calculation
       const otherToken = fromToken === 'tTRUST' ? toToken : fromToken
@@ -387,6 +1142,13 @@ const DEX: React.FC = () => {
       const actualOutput = parseFloat(outputAmount)
       const priceImpact = expectedOutput > 0 ? Math.abs((expectedOutput - actualOutput) / expectedOutput) * 100 : 0
 
+      console.log('📊 getQuote: Price calculation:', {
+        expectedOutput,
+        actualOutput,
+        priceImpact: `${priceImpact.toFixed(2)}%`,
+        exchangeRate: fromToken === 'tTRUST' ? currentRate : 1 / currentRate
+      })
+
       setToAmount(outputAmount)
       setQuote({
         inputAmount: fromAmount,
@@ -395,19 +1157,34 @@ const DEX: React.FC = () => {
         minimumReceived: (parseFloat(outputAmount) * (1 - slippage / 100)).toFixed(6),
         exchangeRate: fromToken === 'tTRUST' ? currentRate : 1 / currentRate
       })
+      setQuoteMethod('original')
+
+      console.log('✅ getQuote: Quote set successfully for', fromToken, '→', toToken)
+
     } catch (error) {
-      console.error('Failed to get quote:', error)
+      console.error('❌ getQuote: Final error - Failed to get quote:', error.message)
+      console.error('❌ getQuote: Error stack:', error.stack)
       setToAmount('')
       setQuote(null)
     }
   }
 
-  // Calculate quote when amounts change
+  // Calculate quote when amounts change - try Scaffold-ETH pattern first
   useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      getQuote()
+    const timeoutId = setTimeout(async () => {
+      console.log('🔄 Quote calculation triggered...')
+
+      // Try Scaffold-ETH pattern first
+      const scaffoldSuccess = await getQuoteScaffoldETH()
+
+      if (!scaffoldSuccess) {
+        console.log('🔄 Scaffold-ETH pattern failed, trying original method...')
+        getQuote()
+      } else {
+        console.log('✅ Scaffold-ETH pattern succeeded!')
+      }
     }, 500) // Debounce API calls
-    
+
     return () => clearTimeout(timeoutId)
   }, [fromAmount, fromToken, toToken, slippage, dexStats])
 
@@ -418,19 +1195,309 @@ const DEX: React.FC = () => {
     setToAmount(fromAmount)
   }
 
+  // New Scaffold-ETH pattern swap function
+  const handleSwapScaffoldETH = async (): Promise<boolean> => {
+    if (!quote || !isConnected || !account || !window.ethereum) return false
+
+    console.log(`🏗 handleSwapScaffoldETH: Starting swap ${fromAmount} ${fromToken} → ${toToken}`)
+
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const signer = await provider.getSigner()
+      const dexInfo = getDEXContractInfo(fromToken, toToken)
+
+      if (dexInfo.error) {
+        console.error('❌ handleSwapScaffoldETH: DEX info error:', dexInfo.error)
+        return false
+      }
+
+      // Only handle direct swaps (no multi-hop for now)
+      if (dexInfo.isMultiHop) {
+        console.warn('⚠️ handleSwapScaffoldETH: Multi-hop not implemented yet')
+        return false
+      }
+
+      const dexContract = new ethers.Contract(dexInfo.contractAddress, dexInfo.abi, signer)
+      const inputAmount = ethers.parseEther(fromAmount)
+      const minAmountOut = ethers.parseEther(quote.minimumReceived)
+
+      let tx
+
+      if (fromToken === 'tTRUST') {
+        // tTRUST → Token (Native token input, use msg.value)
+        console.log(`🏗 handleSwapScaffoldETH: Swapping tTRUST → ${toToken} using ${dexInfo.swapToTokenFunction}`)
+
+        if (toToken === 'ORACLE') {
+          tx = await dexContract.swapTrustForOracle(inputAmount, minAmountOut, {
+            value: inputAmount,
+            gasLimit: 300000
+          })
+        } else if (toToken === 'INTUIT') {
+          tx = await dexContract.swapTrustForIntuit(inputAmount, minAmountOut, {
+            value: inputAmount,
+            gasLimit: 300000
+          })
+        } else if (toToken === 'TSWP') {
+          tx = await dexContract.swapTrustForTswp(inputAmount, minAmountOut, {
+            value: inputAmount,
+            gasLimit: 300000
+          })
+        } else if (toToken === 'PINTU') {
+          tx = await dexContract.swapTrustForPintu(inputAmount, minAmountOut, {
+            value: inputAmount,
+            gasLimit: 300000
+          })
+        } else {
+          console.error('❌ handleSwapScaffoldETH: Unsupported toToken:', toToken)
+          return false
+        }
+
+      } else if (toToken === 'tTRUST') {
+        // Token → tTRUST (ERC20 input, need approval)
+        console.log(`🏗 handleSwapScaffoldETH: Swapping ${fromToken} → tTRUST using ${dexInfo.swapFromTokenFunction}`)
+
+        const tokenContract = new ethers.Contract(dexInfo.tokenContract, ERC20_TOKEN_ABI, signer)
+        const allowance = await tokenContract.allowance(account, dexInfo.contractAddress)
+
+        if (allowance < inputAmount) {
+          console.log(`🏗 handleSwapScaffoldETH: Approving ${fromToken} tokens...`)
+          const approveTx = await tokenContract.approve(dexInfo.contractAddress, inputAmount)
+          await approveTx.wait()
+          console.log(`✅ handleSwapScaffoldETH: ${fromToken} tokens approved`)
+        }
+
+        if (fromToken === 'ORACLE') {
+          tx = await dexContract.swapOracleForTrust(inputAmount, minAmountOut, {
+            gasLimit: 300000
+          })
+        } else if (fromToken === 'INTUIT') {
+          tx = await dexContract.swapIntuitForTrust(inputAmount, minAmountOut, {
+            gasLimit: 300000
+          })
+        } else if (fromToken === 'TSWP') {
+          tx = await dexContract.swapTswpForTrust(inputAmount, minAmountOut, {
+            gasLimit: 300000
+          })
+        } else if (fromToken === 'PINTU') {
+          tx = await dexContract.swapPintuForTrust(inputAmount, minAmountOut, {
+            gasLimit: 300000
+          })
+        } else {
+          console.error('❌ handleSwapScaffoldETH: Unsupported fromToken:', fromToken)
+          return false
+        }
+
+      } else {
+        console.error('❌ handleSwapScaffoldETH: Token → Token swaps not supported in direct pattern')
+        return false
+      }
+
+      console.log(`🏗 handleSwapScaffoldETH: Transaction submitted: ${tx.hash}`)
+
+      // Wait for transaction confirmation
+      const receipt = await tx.wait()
+      console.log(`✅ handleSwapScaffoldETH: Swap confirmed in block ${receipt.blockNumber}`)
+
+      // Track transaction for analytics
+      try {
+        if (account && receipt.hash) {
+          const volumeTTRUST = fromToken === 'tTRUST' ? fromAmount : toAmount
+          trackTransaction(
+            receipt.hash,
+            'swap',
+            account,
+            `${fromToken}→${toToken} (Scaffold-ETH)`,
+            `${fromAmount} ${fromToken}`,
+            volumeTTRUST
+          )
+        }
+      } catch (analyticsError) {
+        console.error('Analytics tracking failed:', analyticsError)
+      }
+
+      // Success notification
+      if (typeof window !== 'undefined' && (window as any).showNotification) {
+        (window as any).showNotification('success', `Scaffold-ETH swap réussi: ${fromAmount} ${fromToken} → ${quote.outputAmount} ${toToken}`, receipt.hash)
+      }
+
+      // Reset form and refresh data
+      setFromAmount('')
+      setToAmount('')
+      setQuote(null)
+
+      // Refresh balances and DEX stats
+      await fetchBalances()
+      await fetchDexStats()
+
+      return true
+
+    } catch (error: any) {
+      console.error('❌ handleSwapScaffoldETH: Swap error:', error.message)
+
+      if (error.code === 4001 || error.message.includes('rejected')) {
+        if (typeof window !== 'undefined' && (window as any).showNotification) {
+          (window as any).showNotification('rejected', 'Transaction was rejected by user')
+        }
+      } else {
+        if (typeof window !== 'undefined' && (window as any).showNotification) {
+          (window as any).showNotification('error', `Scaffold-ETH swap error: ${error.message}`)
+        }
+      }
+
+      return false
+    }
+  }
+
+  // Original swap function (fallback)
   const handleSwap = async () => {
     if (!quote || !isConnected || !account || !window.ethereum) return
 
     setIsLoading(true)
 
-    try {
-      // Validate token pair
-      if (fromToken !== 'tTRUST' && toToken !== 'tTRUST') {
-        throw new Error('All swaps must include tTRUST as one of the tokens')
-      }
+    // Try Scaffold-ETH pattern first
+    const scaffoldSuccess = await handleSwapScaffoldETH()
 
+    if (scaffoldSuccess) {
+      console.log('✅ Scaffold-ETH swap succeeded!')
+      setIsLoading(false)
+      return
+    }
+
+    console.log('🔄 Scaffold-ETH swap failed, trying original method...')
+
+    try {
       // Get the appropriate DEX contract info
       const dexInfo = getDEXContractInfo(fromToken, toToken)
+
+      // Check for errors in dexInfo
+      if (dexInfo.error) {
+        if (typeof window !== 'undefined' && (window as any).showNotification) {
+          (window as any).showNotification('error', dexInfo.error)
+        }
+        setIsLoading(false)
+        return
+      }
+
+      // For multi-hop swaps, use DEXRouter
+      if (dexInfo.isMultiHop) {
+        const provider = new ethers.BrowserProvider(window.ethereum)
+        const signer = await provider.getSigner()
+        const routerContract = new ethers.Contract(dexInfo.contractAddress, dexInfo.abi, signer)
+
+        const inputAmount = ethers.parseEther(fromAmount)
+        const minAmountOut = ethers.parseEther(quote.minimumReceived)
+        const tokenInAddress = TOKENS[fromToken].address
+        const tokenOutAddress = TOKENS[toToken].address
+
+        try {
+          let tx
+
+          if (fromToken === 'tTRUST') {
+            // tTRUST → Token (native token input)
+            tx = await routerContract.swap(
+              tokenInAddress,
+              tokenOutAddress,
+              0, // amountIn = 0 for native token, sent via msg.value
+              minAmountOut,
+              {
+                value: inputAmount,
+                gasLimit: 500000 // Higher gas limit for multi-hop
+              }
+            )
+          } else if (toToken === 'tTRUST') {
+            // Token → tTRUST (ERC20 input)
+            const tokenContract = new ethers.Contract(tokenInAddress, ERC20_TOKEN_ABI, signer)
+            const allowance = await tokenContract.allowance(account, dexInfo.contractAddress)
+
+            if (allowance < inputAmount) {
+              console.log(`Approving ${fromToken} tokens for DEXRouter...`)
+              const approveTx = await tokenContract.approve(dexInfo.contractAddress, inputAmount)
+              await approveTx.wait()
+              console.log(`${fromToken} tokens approved successfully`)
+            }
+
+            tx = await routerContract.swap(
+              tokenInAddress,
+              tokenOutAddress,
+              inputAmount,
+              minAmountOut,
+              {
+                gasLimit: 500000
+              }
+            )
+          } else {
+            // Token → Token (multi-hop via tTRUST)
+            const tokenContract = new ethers.Contract(tokenInAddress, ERC20_TOKEN_ABI, signer)
+            const allowance = await tokenContract.allowance(account, dexInfo.contractAddress)
+
+            if (allowance < inputAmount) {
+              console.log(`Approving ${fromToken} tokens for DEXRouter...`)
+              const approveTx = await tokenContract.approve(dexInfo.contractAddress, inputAmount)
+              await approveTx.wait()
+              console.log(`${fromToken} tokens approved successfully`)
+            }
+
+            tx = await routerContract.swap(
+              tokenInAddress,
+              tokenOutAddress,
+              inputAmount,
+              minAmountOut,
+              {
+                gasLimit: 600000 // Even higher gas for full multi-hop
+              }
+            )
+          }
+
+          console.log(`Multi-hop swap transaction submitted: ${tx.hash}`)
+
+          // Wait for transaction confirmation
+          const receipt = await tx.wait()
+          console.log(`Multi-hop swap confirmed in block ${receipt.blockNumber}`)
+
+          // Track multi-hop transaction for analytics
+          try {
+            if (account && receipt.hash) {
+              const volumeTTRUST = fromToken === 'tTRUST' ? fromAmount :
+                                  toToken === 'tTRUST' ? toAmount :
+                                  (parseFloat(fromAmount) + parseFloat(toAmount)) / 2 // Estimate for token-token
+              trackTransaction(
+                receipt.hash,
+                'swap',
+                account,
+                `${fromToken}→${toToken} (multi-hop)`,
+                `${fromAmount} ${fromToken}`,
+                volumeTTRUST
+              )
+            }
+          } catch (analyticsError) {
+            console.error('Analytics tracking failed:', analyticsError)
+          }
+
+          // Success notification
+          if (typeof window !== 'undefined' && (window as any).showNotification) {
+            (window as any).showNotification('success', `Multi-hop swap réussi: ${fromAmount} ${fromToken} → ${quote.outputAmount} ${toToken}`, receipt.hash)
+          }
+
+          // Reset form and refresh data
+          setFromAmount('')
+          setToAmount('')
+          setQuote(null)
+
+          // Refresh balances and DEX stats
+          await fetchBalances()
+          await fetchDexStats()
+
+          setIsLoading(false)
+          return
+        } catch (error) {
+          console.error('Multi-hop swap error:', error)
+          if (typeof window !== 'undefined' && (window as any).showNotification) {
+            (window as any).showNotification('error', `Erreur multi-hop: ${error.message || 'Swap échoué'}`)
+          }
+          setIsLoading(false)
+          return
+        }
+      }
       const provider = new ethers.BrowserProvider(window.ethereum)
       const signer = await provider.getSigner()
       const dexContract = new ethers.Contract(dexInfo.contractAddress, dexInfo.abi, signer)
@@ -563,7 +1630,7 @@ const DEX: React.FC = () => {
     return tokenData.symbol.charAt(0)
   }
 
-  const slippageOptions = [0.1, 0.5, 1.0, 2.0]
+  const slippageOptions = [0.1, 0.5, 1.0, 2.0] // Multi-token support complet
 
   // Calculate volume in USD for analytics
   const calculateVolumeUSD = (token: string, amount: string) => {
@@ -637,6 +1704,27 @@ const DEX: React.FC = () => {
                 >
                   <i className="fas fa-sync-alt"></i>
                   <span className="text-sm">Refresh</span>
+                </button>
+                <button
+                  onClick={runDEXDiagnostics}
+                  className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-3 py-2 glass-effect border border-yellow-600/50 rounded-lg text-yellow-400 hover:text-yellow-300 hover:border-yellow-500/50 transition-all min-h-[44px]"
+                  title="Test DEX contracts functionality with Scaffold-ETH pattern"
+                >
+                  <i className="fas fa-stethoscope"></i>
+                  <span className="text-sm hidden sm:inline">Diagnostic</span>
+                  <span className="text-sm sm:hidden">Test</span>
+                </button>
+                <button
+                  onClick={async () => {
+                    console.log('🏗 Testing Scaffold-ETH quote calculation...')
+                    await getQuoteScaffoldETH()
+                  }}
+                  className="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-3 py-2 glass-effect border border-green-600/50 rounded-lg text-green-400 hover:text-green-300 hover:border-green-500/50 transition-all min-h-[44px]"
+                  title="Test Scaffold-ETH quote calculation"
+                >
+                  <i className="fas fa-calculator"></i>
+                  <span className="text-sm hidden sm:inline">Quote Test</span>
+                  <span className="text-sm sm:hidden">Quote</span>
                 </button>
               </div>
             </div>
@@ -736,7 +1824,7 @@ const DEX: React.FC = () => {
               </div>
 
               {/* From Token */}
-              <div className="space-y-5">
+              <div className="space-y-4 sm:space-y-5">
                 <div>
                   <div className="flex justify-between items-center mb-2">
                     <label className="text-sm text-slate-200 font-medium">From</label>
@@ -744,8 +1832,8 @@ const DEX: React.FC = () => {
                       Balance: {parseFloat(balances[fromToken]).toFixed(4)}
                     </span>
                   </div>
-                  <div className="glass-effect rounded-lg p-4 sm:p-5 border border-gray-600/30">
-                    <div className="flex items-center justify-between gap-3 mb-4">
+                  <div className="glass-effect rounded-lg p-3 sm:p-4 border border-gray-600/30">
+                    <div className="flex items-center justify-between gap-2 sm:gap-3 mb-3 sm:mb-4">
                       <input
                         type="number"
                         min="0"
@@ -758,13 +1846,13 @@ const DEX: React.FC = () => {
                           }
                         }}
                         placeholder="0.00"
-                        className="bg-transparent text-lg sm:text-xl font-semibold text-white placeholder-slate-400 flex-1 outline-none w-full py-2"
+                        className="bg-transparent text-base sm:text-lg font-semibold text-white placeholder-slate-400 flex-1 outline-none w-full py-2 min-w-0"
                       />
-                      <div className="relative">
+                      <div className="relative flex-shrink-0">
                         <select
                           value={fromToken}
                           onChange={(e) => setFromToken(e.target.value as TokenSymbol)}
-                          className="appearance-none glass-effect rounded-lg pl-2 pr-10 py-1 text-lg sm:text-xl text-white font-semibold cursor-pointer hover:border-cyan-400/50 transition-all duration-200 border border-purple-500/30 focus:border-cyan-400/70 outline-none min-h-[44px]"
+                          className="appearance-none glass-effect rounded-lg pl-2 pr-8 py-1 text-sm sm:text-base text-white font-semibold cursor-pointer hover:border-cyan-400/50 transition-all duration-200 border border-purple-500/30 focus:border-cyan-400/70 outline-none min-h-[40px]"
                         >
                           {(Object.keys(TOKENS) as TokenSymbol[]).map((token) => (
                             <option key={token} value={token} className="bg-gray-800">
@@ -772,31 +1860,31 @@ const DEX: React.FC = () => {
                             </option>
                           ))}
                         </select>
-                        <i className="fas fa-chevron-down absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none"></i>
+                        <i className="fas fa-chevron-down absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none text-xs"></i>
                       </div>
                     </div>
-                    <div className="grid grid-cols-4 gap-2 sm:gap-3">
+                    <div className="grid grid-cols-4 gap-1 sm:gap-2">
                       <button
                         onClick={() => setFromAmount((parseFloat(balances[fromToken]) * 0.25).toString())}
-                        className="py-3 px-2 text-xs font-semibold text-cyan-300 hover:text-white rounded-xl glass-effect border border-cyan-500/40 hover:border-cyan-400/70 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-400/30 min-h-[44px]"
+                        className="py-2 sm:py-3 px-1 sm:px-2 text-xs font-semibold text-cyan-300 hover:text-white rounded-lg glass-effect border border-cyan-500/40 hover:border-cyan-400/70 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-400/30 min-h-[36px] sm:min-h-[44px]"
                       >
                         25%
                       </button>
                       <button
                         onClick={() => setFromAmount((parseFloat(balances[fromToken]) * 0.5).toString())}
-                        className="py-3 px-2 text-xs font-semibold text-cyan-300 hover:text-white rounded-xl glass-effect border border-cyan-500/40 hover:border-cyan-400/70 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-400/30 min-h-[44px]"
+                        className="py-2 sm:py-3 px-1 sm:px-2 text-xs font-semibold text-cyan-300 hover:text-white rounded-lg glass-effect border border-cyan-500/40 hover:border-cyan-400/70 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-400/30 min-h-[36px] sm:min-h-[44px]"
                       >
                         50%
                       </button>
                       <button
                         onClick={() => setFromAmount((parseFloat(balances[fromToken]) * 0.75).toString())}
-                        className="py-3 px-2 text-xs font-semibold text-cyan-300 hover:text-white rounded-xl glass-effect border border-cyan-500/40 hover:border-cyan-400/70 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-400/30 min-h-[44px]"
+                        className="py-2 sm:py-3 px-1 sm:px-2 text-xs font-semibold text-cyan-300 hover:text-white rounded-lg glass-effect border border-cyan-500/40 hover:border-cyan-400/70 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-400/30 min-h-[36px] sm:min-h-[44px]"
                       >
                         75%
                       </button>
                       <button
                         onClick={() => setFromAmount(balances[fromToken])}
-                        className="py-3 px-2 text-xs font-semibold text-cyan-300 hover:text-white rounded-xl glass-effect border border-cyan-500/40 hover:border-cyan-400/70 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-400/30 min-h-[44px]"
+                        className="py-2 sm:py-3 px-1 sm:px-2 text-xs font-semibold text-cyan-300 hover:text-white rounded-lg glass-effect border border-cyan-500/40 hover:border-cyan-400/70 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-400/30 min-h-[36px] sm:min-h-[44px]"
                       >
                         MAX
                       </button>
@@ -804,13 +1892,14 @@ const DEX: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Swap Button */}
-                <div className="flex justify-center">
+                {/* Swap Button - Improved spacing */}
+                <div className="flex justify-center py-2">
                   <button
                     onClick={handleSwapTokens}
-                    className="w-12 h-12 rounded-full glass-effect border-2 border-cyan-500/40 hover:border-cyan-400/70 text-cyan-300 hover:text-white transition-all duration-300 hover:scale-110 hover:shadow-lg hover:shadow-cyan-400/30 font-medium"
+                    className="w-10 h-10 sm:w-12 sm:h-12 rounded-full glass-effect border-2 border-cyan-500/40 hover:border-cyan-400/70 text-cyan-300 hover:text-white transition-all duration-300 hover:scale-110 hover:shadow-lg hover:shadow-cyan-400/30 font-medium flex items-center justify-center"
+                    title="Swap token positions"
                   >
-                    <i className="fas fa-arrow-down"></i>
+                    <i className="fas fa-arrow-down text-sm sm:text-base"></i>
                   </button>
                 </div>
 
@@ -822,20 +1911,20 @@ const DEX: React.FC = () => {
                       Balance: {parseFloat(balances[toToken]).toFixed(4)}
                     </span>
                   </div>
-                  <div className="glass-effect rounded-lg p-4 sm:p-5 border border-gray-600/30">
-                    <div className="flex items-center justify-between gap-3">
+                  <div className="glass-effect rounded-lg p-3 sm:p-4 border border-gray-600/30">
+                    <div className="flex items-center justify-between gap-2 sm:gap-3">
                       <input
                         type="number"
                         value={toAmount}
                         readOnly
                         placeholder="0.00"
-                        className="bg-transparent text-lg sm:text-xl font-semibold text-white placeholder-slate-400 flex-1 outline-none w-full py-2"
+                        className="bg-transparent text-base sm:text-lg font-semibold text-white placeholder-slate-400 flex-1 outline-none w-full py-2 min-w-0"
                       />
-                      <div className="relative">
+                      <div className="relative flex-shrink-0">
                         <select
                           value={toToken}
                           onChange={(e) => setToToken(e.target.value as TokenSymbol)}
-                          className="appearance-none glass-effect rounded-lg pl-2 pr-10 py-1 text-lg sm:text-xl text-white font-semibold cursor-pointer hover:border-cyan-400/50 transition-all duration-200 border border-purple-500/30 focus:border-cyan-400/70 outline-none min-h-[44px]"
+                          className="appearance-none glass-effect rounded-lg pl-2 pr-8 py-1 text-sm sm:text-base text-white font-semibold cursor-pointer hover:border-cyan-400/50 transition-all duration-200 border border-purple-500/30 focus:border-cyan-400/70 outline-none min-h-[40px]"
                         >
                           {(Object.keys(TOKENS) as TokenSymbol[]).map((token) => (
                             <option key={token} value={token} className="bg-gray-800">
@@ -843,7 +1932,7 @@ const DEX: React.FC = () => {
                             </option>
                           ))}
                         </select>
-                        <i className="fas fa-chevron-down absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none"></i>
+                        <i className="fas fa-chevron-down absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none text-xs"></i>
                       </div>
                     </div>
                   </div>
@@ -851,7 +1940,36 @@ const DEX: React.FC = () => {
 
                 {/* Swap Details */}
                 {quote && (
-                  <div className="glass-effect rounded-lg p-4 space-y-2 text-sm">
+                  <div className={`glass-effect rounded-lg p-4 space-y-2 text-sm border ${quote.isMultiHop ? 'border-purple-500/50' : quoteMethod === 'scaffold-eth' ? 'border-green-500/50' : 'border-gray-600/30'}`}>
+                    {/* Quote Method Indicator */}
+                    <div className="flex justify-between items-center mb-2 pb-2 border-b border-gray-500/30">
+                      {quoteMethod === 'scaffold-eth' ? (
+                        <span className="text-green-300 font-medium text-xs">🏗 Scaffold-ETH Pattern</span>
+                      ) : quoteMethod === 'original' ? (
+                        <span className="text-blue-300 font-medium text-xs">🔧 Original Pattern</span>
+                      ) : (
+                        <span className="text-gray-300 font-medium text-xs">📊 Quote Details</span>
+                      )}
+                      {quote.isMultiHop && (
+                        <div className="text-purple-400 text-xs overflow-hidden">
+                          <span className="hidden sm:inline">{quote.route}</span>
+                          <span className="sm:hidden" title={quote.route}>
+                            {formatRoute(quote.route || '', 'mobile')}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    {quote.isMultiHop && (
+                      <div className="flex justify-between items-center mb-2 pb-2 border-b border-purple-500/30">
+                        <span className="text-purple-300 font-medium">🔀 Multi-Hop Swap</span>
+                        <div className="text-purple-400 text-xs overflow-hidden">
+                          <span className="hidden sm:inline">{quote.route}</span>
+                          <span className="sm:hidden" title={quote.route}>
+                            {formatRoute(quote.route || '', 'mobile')}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span className="text-gray-400">Exchange Rate:</span>
                       <span className="text-white">
@@ -861,7 +1979,7 @@ const DEX: React.FC = () => {
                     <div className="flex justify-between">
                       <span className="text-gray-400">Price Impact:</span>
                       <span className={`${quote.priceImpact < 1 ? 'text-green-400' : quote.priceImpact < 3 ? 'text-yellow-400' : 'text-red-400'}`}>
-                        {quote.priceImpact.toFixed(2)}%
+                        {quote.priceImpact.toFixed(2)}%{quote.isMultiHop ? ' (composé)' : ''}
                       </span>
                     </div>
                     <div className="flex justify-between">
@@ -872,6 +1990,12 @@ const DEX: React.FC = () => {
                       <span className="text-gray-400">Slippage Tolerance:</span>
                       <span className="text-white">{slippage}%</span>
                     </div>
+                    {quote.isMultiHop && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Frais estimés:</span>
+                        <span className="text-orange-400">~0.6% (2 swaps)</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -925,12 +2049,22 @@ const DEX: React.FC = () => {
                     <TokenIcon token="ORACLE" size="lg" />
                   </div>
                   <h3 className="text-sm sm:text-base font-bold text-white mb-1">TTRUST to ORACLE</h3>
-                  <p className="text-xl sm:text-2xl font-bold text-green-400">
-                    1 : {dexStats.currentPrice > 0 ? dexStats.currentPrice.toFixed(0) : '500,000'}
-                  </p>
-                  <p className="text-sm text-gray-400 mt-1">
-                    1 TTRUST = {dexStats.currentPrice > 0 ? dexStats.currentPrice.toFixed(0) : '500,000'} ORACLE
-                  </p>
+                  <div className="text-xl sm:text-2xl font-bold text-green-400 overflow-hidden">
+                    <span className="hidden sm:inline">
+                      1 : {dexStats.currentPrice > 0 ? formatLargeNumber(dexStats.currentPrice, '', 'desktop') : '500K'}
+                    </span>
+                    <span className="sm:hidden">
+                      1 : {dexStats.currentPrice > 0 ? formatLargeNumber(dexStats.currentPrice, '', 'mobile') : '500K'}
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-400 mt-1 overflow-hidden">
+                    <span className="hidden sm:inline">
+                      1 TTRUST = {dexStats.currentPrice > 0 ? formatLargeNumber(dexStats.currentPrice, 'ORACLE', 'desktop') : '500K ORACLE'}
+                    </span>
+                    <span className="sm:hidden">
+                      1 TTR = {dexStats.currentPrice > 0 ? formatLargeNumber(dexStats.currentPrice, 'ORC', 'mobile') : '500K ORC'}
+                    </span>
+                  </div>
                 </div>
               </div>
               
@@ -942,12 +2076,22 @@ const DEX: React.FC = () => {
                     <span>⚡</span>
                   </div>
                   <h3 className="text-sm sm:text-base font-bold text-white mb-1">ORACLE to TTRUST</h3>
-                  <p className="text-xl sm:text-2xl font-bold text-cyan-400">
-                    {dexStats.currentPrice > 0 ? dexStats.currentPrice.toFixed(0) : '500,000'} : 1
-                  </p>
-                  <p className="text-sm text-gray-400 mt-1">
-                    {dexStats.currentPrice > 0 ? dexStats.currentPrice.toFixed(0) : '500,000'} ORACLE = 1 TTRUST
-                  </p>
+                  <div className="text-xl sm:text-2xl font-bold text-cyan-400 overflow-hidden">
+                    <span className="hidden sm:inline">
+                      {dexStats.currentPrice > 0 ? formatLargeNumber(dexStats.currentPrice, '', 'desktop') : '500K'} : 1
+                    </span>
+                    <span className="sm:hidden">
+                      {dexStats.currentPrice > 0 ? formatLargeNumber(dexStats.currentPrice, '', 'mobile') : '500K'} : 1
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-400 mt-1 overflow-hidden">
+                    <span className="hidden sm:inline">
+                      {dexStats.currentPrice > 0 ? formatLargeNumber(dexStats.currentPrice, 'ORACLE', 'desktop') : '500K ORACLE'} = 1 TTRUST
+                    </span>
+                    <span className="sm:hidden">
+                      {dexStats.currentPrice > 0 ? formatLargeNumber(dexStats.currentPrice, 'ORC', 'mobile') : '500K ORC'} = 1 TTR
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -960,21 +2104,33 @@ const DEX: React.FC = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 text-gray-300">
                     <div>
                       <p className="text-blue-200">TTRUST Reserve:</p>
-                      <p className="font-mono">{parseFloat(dexStats.ethReserve).toFixed(4)} TTRUST</p>
+                      <div className="font-mono">
+                        <span className="hidden sm:inline">{parseFloat(dexStats.ethReserve).toFixed(4)} TTRUST</span>
+                        <span className="sm:hidden">{formatLargeNumber(dexStats.ethReserve, 'TTR', 'mobile')}</span>
+                      </div>
                     </div>
                     <div>
                       <p className="text-blue-200">ORACLE Reserve:</p>
-                      <p className="font-mono">{parseFloat(dexStats.oracleReserve).toLocaleString()} ORACLE</p>
+                      <div className="font-mono overflow-hidden">
+                        <span className="hidden sm:inline">{formatLargeNumber(dexStats.oracleReserve, 'ORACLE', 'desktop')}</span>
+                        <span className="sm:hidden">{formatLargeNumber(dexStats.oracleReserve, 'ORC', 'mobile')}</span>
+                      </div>
                     </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 text-gray-300 mt-2">
                     <div>
                       <p className="text-blue-200">Total Volume:</p>
-                      <p className="font-mono">{parseFloat(dexStats.totalVolume).toFixed(2)} TTRUST</p>
+                      <div className="font-mono overflow-hidden">
+                        <span className="hidden sm:inline">{formatLargeNumber(dexStats.totalVolume, 'TTRUST', 'desktop')}</span>
+                        <span className="sm:hidden">{formatLargeNumber(dexStats.totalVolume, 'TTR', 'mobile')}</span>
+                      </div>
                     </div>
                     <div>
                       <p className="text-blue-200">Total Trades:</p>
-                      <p className="font-mono">{dexStats.totalTrades}</p>
+                      <div className="font-mono overflow-hidden">
+                        <span className="hidden sm:inline">{formatLargeNumber(dexStats.totalTrades, '', 'desktop')}</span>
+                        <span className="sm:hidden">{formatLargeNumber(dexStats.totalTrades, '', 'mobile')}</span>
+                      </div>
                     </div>
                   </div>
                   <p className="text-gray-300 mt-2">
@@ -1001,23 +2157,45 @@ const DEX: React.FC = () => {
                 <div className="space-y-3">
                   {(() => {
                     const dexInfo = getDEXContractInfo(fromToken, toToken);
-                    const pairName = fromToken === 'tTRUST' && toToken === 'ORACLE' ? 'tTRUST/ORACLE' :
-                                   fromToken === 'tTRUST' && toToken === 'INTUIT' ? 'tTRUST/INTUIT' :
-                                   fromToken === 'tTRUST' && toToken === 'TSWP' ? 'tTRUST/TSWP' :
-                                   fromToken === 'tTRUST' && toToken === 'PINTU' ? 'tTRUST/PINTU' :
-                                   `${fromToken}/${toToken}`;
+
+                    // Handle errors gracefully
+                    if (dexInfo.error) {
+                      return (
+                        <div className="bg-red-900/20 rounded-lg p-4 border border-red-500/30">
+                          <div className="mb-3">
+                            <span className="text-sm text-red-400">Erreur:</span>
+                            <p className="text-lg font-bold text-red-300">{dexInfo.error}</p>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    const pairName = dexInfo.isMultiHop
+                      ? `${fromToken} → tTRUST → ${toToken} (Multi-hop)`
+                      : fromToken === 'tTRUST' && toToken === 'ORACLE' ? 'tTRUST/ORACLE' :
+                        fromToken === 'tTRUST' && toToken === 'INTUIT' ? 'tTRUST/INTUIT' :
+                        fromToken === 'tTRUST' && toToken === 'TSWP' ? 'tTRUST/TSWP' :
+                        fromToken === 'tTRUST' && toToken === 'PINTU' ? 'tTRUST/PINTU' :
+                        `${fromToken}/${toToken}`;
 
                     return (
-                      <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-600/30">
+                      <div className={`bg-gray-800/50 rounded-lg p-4 border ${dexInfo.isMultiHop ? 'border-purple-500/30' : 'border-gray-600/30'}`}>
                         <div className="mb-3">
                           <span className="text-sm text-gray-400">Trading Pair:</span>
                           <p className="text-lg font-bold text-white">{pairName}</p>
+                          {dexInfo.isMultiHop && (
+                            <p className="text-sm text-purple-400 mt-1">
+                              🔀 Routage via DEXRouter (en développement)
+                            </p>
+                          )}
                         </div>
-                        <ContractAddressLink
-                          address={dexInfo.contractAddress}
-                          label="DEX Contract"
-                          className="text-sm"
-                        />
+                        {dexInfo.contractAddress && (
+                          <ContractAddressLink
+                            address={dexInfo.contractAddress}
+                            label={dexInfo.isMultiHop ? "DEX Router" : "DEX Contract"}
+                            className="text-sm"
+                          />
+                        )}
                       </div>
                     );
                   })()}
