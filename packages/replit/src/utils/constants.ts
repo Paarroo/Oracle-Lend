@@ -18,7 +18,7 @@ export const INTUITION_TESTNET = {
     oracleLend: '0x552948CC80f3D757E4c18a702F5DdD42a06E7039', // OracleLend contract (5M ORACLE funded)
     oracleToken: '0x1AA6ad0A70Dd90796F2936BD11F0d4DEF7553b04', // OracleToken contract (10M supply)
     dex: '0x216cCe003Be533D11Fd4B6d87F066Eef48B42568', // DEX contract (10 TTRUST + 5M ORACLE liquidity)
-    tTrustToken: '0x0000000000000000000000000000000000000000', // Native TTRUST
+    tTrustToken: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', // Native TTRUST (ETH placeholder pattern)
 
     // ✅ DEPLOYED: New tokens on Intuition Testnet
     intuitToken: '0xD8a5a9b31c3C0232E196d518E89Fd8bF83AcAd43', // INTUIT Token (100M supply)
@@ -29,7 +29,7 @@ export const INTUITION_TESTNET = {
     dexIntuit: '0x36b58F5C1969B7b6591D752ea6F5486D069010AB', // DEX_INTUIT (tTRUST/INTUIT)
     dexTswp: '0x8198f5d8F8CfFE8f9C413d98a0A55aEB8ab9FbB7', // DEX_TSWP (tTRUST/TSWP)
     dexPintu: '0x0355B7B8cb128fA5692729Ab3AAa199C1753f726', // DEX_PINTU (tTRUST/PINTU)
-    dexRouter: '0x9A676e781A523b5d0C0e43731313A708CB607508', // DEXRouter for multi-hop
+    dexRouter: '0x202CCe504e04bEd6fC0521238dDf04Bc9E8E15aB', // DEXRouter for multi-hop
   }
 } as const
 

@@ -97,6 +97,8 @@ export interface SwapQuote {
   priceImpact: number
   minimumReceived: string
   exchangeRate: number
+  isMultiHop?: boolean
+  route?: string
 }
 
 export interface Transaction {
