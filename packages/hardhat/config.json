@@ -5,13 +5,35 @@
       "symbol": "ORACLE",
       "totalSupply": "10000000",
       "maxSupply": "10000000"
+    },
+    "intuitToken": {
+      "name": "INTUIT Token",
+      "symbol": "INTUIT",
+      "totalSupply": "100000000",
+      "maxSupply": "100000000"
+    },
+    "tswpToken": {
+      "name": "TSWP Token",
+      "symbol": "TSWP",
+      "totalSupply": "50000000",
+      "maxSupply": "50000000"
+    },
+    "pintuToken": {
+      "name": "PINTU Token",
+      "symbol": "PINTU",
+      "totalSupply": "10000000",
+      "maxSupply": "15000000",
+      "stakingAPR": "12"
     }
   },
   "distribution": {
     "dexLiquidity": {
       "ttrust": "2000",
       "oracle": "5000000",
-      "description": "2k TTRUST + 5M ORACLE "
+      "intuit": "10000",
+      "tswp": "5000",
+      "pintu": "1000",
+      "description": "Initial liquidity for all DEX pairs"
     },
     "lendingProtocol": {
       "oracle": "4000000",
@@ -19,7 +41,14 @@
     },
     "remaining": {
       "oracle": "1000000",
-      "description": "1000000 ORACLE tokens remaining for future use"
+      "intuit": "89990000",
+      "tswp": "49995000",
+      "pintu": "8999000",
+      "description": "Remaining tokens for future use, rewards, and ecosystem growth"
+    },
+    "stakingRewards": {
+      "pintu": "5000000",
+      "description": "Reserved PINTU tokens for staking rewards (part of max supply)"
     }
   },
   "lendingConfig": {

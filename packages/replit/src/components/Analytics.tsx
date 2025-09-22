@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { useContract } from '../hooks/useContract'
 import TokenIcon from './TokenIcon'
+import ContractAddressLink from './ContractAddressLink'
+import { INTUITION_TESTNET } from '../utils/constants'
 
 const Analytics: React.FC = () => {
   const { 
@@ -177,48 +179,48 @@ const Analytics: React.FC = () => {
 
   const mainMetrics = [
     {
-      title: 'Current Price',
-      value: `1 TTRUST = ${formatCurrency(currentPriceNum.toString())} ORACLE`,
+      title: 'Primary Pool Price',
+      value: `1 tTRUST = ${formatCurrency(currentPriceNum.toString())} ORACLE`,
       change: null,
       icon: 'fas fa-chart-line',
       color: 'text-green-400',
-      subtitle: `1 ORACLE = ${formatSmartPrecision(1 / currentPriceNum)} TTRUST`
+      subtitle: `Main trading pair (tTRUST/ORACLE)`
     },
     {
-      title: 'DEX Liquidity',
-      value: `${formatCurrency(realTimeData.dexReserves.tTRUST)} TTRUST`,
+      title: 'Main Pool Liquidity',
+      value: `${formatCurrency(realTimeData.dexReserves.tTRUST)} tTRUST`,
       change: null,
       icon: 'fas fa-exchange-alt',
       color: 'text-blue-400',
       subtitle: `${formatInteger(realTimeData.dexReserves.ORACLE)} ORACLE`
     },
     {
-      title: 'Lending Protocol',
-      value: `${formatCurrency(realTimeData.lendingStats.totalCollateral)} TTRUST`,
+      title: 'Primary Lending Pool',
+      value: `${formatCurrency(realTimeData.lendingStats.totalCollateral)} tTRUST`,
       change: null,
       icon: 'fas fa-university',
       color: 'text-purple-400',
-      subtitle: `${formatInteger(realTimeData.lendingStats.oracleBalance)} ORACLE`
+      subtitle: `${formatInteger(realTimeData.lendingStats.oracleBalance)} ORACLE available`
     }
   ]
 
   const protocolStatsData = [
     {
-      category: 'Lending Protocol',
+      category: 'Primary Lending Pool',
       stats: [
-        { label: 'TTRUST Collateral', value: `${formatCurrency(realTimeData.lendingStats.totalCollateral)} TTRUST`, icon: '⚡' },
+        { label: 'tTRUST Collateral', value: `${formatCurrency(realTimeData.lendingStats.totalCollateral)} tTRUST`, icon: '⚡' },
         { label: 'ORACLE Available', value: `${formatInteger(realTimeData.lendingStats.oracleBalance)} ORACLE`, icon: <TokenIcon token="ORACLE" size="sm" /> },
-        { label: 'Current Price', value: `${formatNumber(parseFloat(protocolStats.currentPrice) / 1e18)} ORACLE/TTRUST`, icon: '💰' },
+        { label: 'Exchange Rate', value: `${formatNumber(parseFloat(protocolStats.currentPrice) / 1e18)} ORACLE/tTRUST`, icon: '💰' },
         { label: 'Collateral Ratio', value: '120%', icon: '🛡️' }
       ]
     },
     {
-      category: 'DEX Analytics',
+      category: 'Main DEX Pool',
       stats: [
-        { label: 'TTRUST Reserve', value: `${formatCurrency(realTimeData.dexReserves.tTRUST)} TTRUST`, icon: '⚡' },
+        { label: 'tTRUST Reserve', value: `${formatCurrency(realTimeData.dexReserves.tTRUST)} tTRUST`, icon: '⚡' },
         { label: 'ORACLE Reserve', value: `${formatInteger(realTimeData.dexReserves.ORACLE)} ORACLE`, icon: <TokenIcon token="ORACLE" size="sm" /> },
-        { label: 'LP Token Supply', value: 'N/A', icon: '🔄' },
-        { label: 'Pool Health', value: 'Active', icon: '✅' }
+        { label: 'Pool Type', value: 'AMM (x*y=k)', icon: '🔄' },
+        { label: 'Pool Status', value: 'Active', icon: '✅' }
       ]
     }
   ]
@@ -293,7 +295,7 @@ const Analytics: React.FC = () => {
             <h3 className="text-base sm:text-lg font-semibold text-white">🏦 Lending Protocol</h3>
             <ul className="text-gray-300 text-xs sm:text-sm space-y-1 sm:space-y-2">
               <li>• Over-collateralized lending (120% ratio)</li>
-              <li>• TTRUST as collateral, ORACLE as borrowable asset</li>
+              <li>• Multi-token support (tTRUST, ORACLE, INTUIT, TSWP, PINTU)</li>
               <li>• 10% liquidation bonus for liquidators</li>
               <li>• Real-time price discovery via DEX</li>
             </ul>
@@ -303,19 +305,141 @@ const Analytics: React.FC = () => {
             <h3 className="text-base sm:text-lg font-semibold text-white">🔄 DEX (AMM)</h3>
             <ul className="text-gray-300 text-xs sm:text-sm space-y-1 sm:space-y-2">
               <li>• Constant product formula (x * y = k)</li>
-              <li>• TTRUST/ORACLE trading pair</li>
+              <li>• Multiple trading pairs (tTRUST/ORACLE, INTUIT, TSWP, PINTU)</li>
               <li>• Serves as price oracle for lending</li>
-              <li>• Native TTRUST integration</li>
+              <li>• Multi-token ecosystem support</li>
             </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Protocol Contracts */}
+      <div className="glass-effect rounded-xl p-4 sm:p-6 border border-gray-700/50">
+        <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6 flex items-center">
+          <i className="fas fa-file-contract text-purple-400 mr-3"></i>
+          Protocol Contracts
+        </h2>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-600/30">
+            <div className="flex items-center space-x-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                <i className="fas fa-university text-green-400"></i>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Lending Protocol</h3>
+                <p className="text-xs text-gray-400">Core lending contract</p>
+              </div>
+            </div>
+            <ContractAddressLink
+              address={INTUITION_TESTNET.contracts.oracleLend}
+              label="OracleLend"
+              className="text-sm"
+            />
+          </div>
+
+          <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-600/30">
+            <div className="flex items-center space-x-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                <i className="fas fa-exchange-alt text-blue-400"></i>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Main DEX</h3>
+                <p className="text-xs text-gray-400">tTRUST/ORACLE pair</p>
+              </div>
+            </div>
+            <ContractAddressLink
+              address={INTUITION_TESTNET.contracts.dex}
+              label="DEX Contract"
+              className="text-sm"
+            />
+          </div>
+
+          <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-600/30">
+            <div className="flex items-center space-x-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                <TokenIcon token="ORACLE" size="sm" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">ORACLE Token</h3>
+                <p className="text-xs text-gray-400">Primary borrowable asset</p>
+              </div>
+            </div>
+            <ContractAddressLink
+              address={INTUITION_TESTNET.contracts.oracleToken}
+              label="Token Contract"
+              className="text-sm"
+            />
+          </div>
+
+          <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-600/30">
+            <div className="flex items-center space-x-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                <TokenIcon token="INTUIT" size="sm" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">INTUIT DEX</h3>
+                <p className="text-xs text-gray-400">tTRUST/INTUIT pair</p>
+              </div>
+            </div>
+            <ContractAddressLink
+              address={INTUITION_TESTNET.contracts.dexIntuit}
+              label="DEX Contract"
+              className="text-sm"
+            />
+          </div>
+
+          <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-600/30">
+            <div className="flex items-center space-x-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                <TokenIcon token="TSWP" size="sm" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">TSWP DEX</h3>
+                <p className="text-xs text-gray-400">tTRUST/TSWP pair</p>
+              </div>
+            </div>
+            <ContractAddressLink
+              address={INTUITION_TESTNET.contracts.dexTswp}
+              label="DEX Contract"
+              className="text-sm"
+            />
+          </div>
+
+          <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-600/30">
+            <div className="flex items-center space-x-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-pink-500/20 flex items-center justify-center">
+                <TokenIcon token="PINTU" size="sm" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">PINTU DEX</h3>
+                <p className="text-xs text-gray-400">tTRUST/PINTU pair</p>
+              </div>
+            </div>
+            <ContractAddressLink
+              address={INTUITION_TESTNET.contracts.dexPintu}
+              label="DEX Contract"
+              className="text-sm"
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 p-3 bg-purple-900/20 border border-purple-500/30 rounded-lg">
+          <div className="flex items-start space-x-3">
+            <i className="fas fa-shield-alt text-purple-400 mt-1"></i>
+            <div className="text-sm text-gray-300">
+              <p className="font-medium text-purple-300 mb-1">Security & Verification</p>
+              <p>All protocol contracts are deployed on Intuition Testnet with full source code verification. Click any address to explore contract details, transactions, and interact directly with the blockchain.</p>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Discord Link */}
       <div className="text-center py-8">
-        <a 
-          href="https://discord.com/invite/0xintuition" 
-          target="_blank" 
+        <a
+          href="https://discord.com/invite/0xintuition"
+          target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center space-x-2 sm:space-x-3 px-4 sm:px-6 py-2 sm:py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-sm sm:text-base font-medium rounded-lg transition-colors duration-200 shadow-lg hover:shadow-indigo-500/25 min-h-[44px]"
         >

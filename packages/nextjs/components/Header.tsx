@@ -21,6 +21,26 @@ export const menuLinks: HeaderMenuLink[] = [
     href: "/",
   },
   {
+    label: "Tokens",
+    href: "/tokens",
+    icon: <span className="text-sm">🪙</span>,
+  },
+  {
+    label: "Staking",
+    href: "/staking",
+    icon: <span className="text-sm">💎</span>,
+  },
+  {
+    label: "Lending",
+    href: "/lending",
+    icon: <span className="text-sm">🏦</span>,
+  },
+  {
+    label: "DEX",
+    href: "/dex",
+    icon: <span className="text-sm">💱</span>,
+  },
+  {
     label: "Debug Contracts",
     href: "/debug",
     icon: <BugAntIcon className="h-4 w-4" />,

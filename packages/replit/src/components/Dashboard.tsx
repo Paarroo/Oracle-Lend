@@ -2,6 +2,7 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 import { PROTOCOL_CONFIG, TOKENS } from '../utils/constants'
 import TokenIcon from './TokenIcon'
+import ContractAddressLink from './ContractAddressLink'
 
 const Dashboard: React.FC = () => {
   const features = [
@@ -14,7 +15,7 @@ const Dashboard: React.FC = () => {
     },
     {
       title: 'Token Swap',
-      description: 'Swap between tTRUST and ORACLE tokens with minimal slippage and low fees.',
+      description: 'Swap between multiple tokens (tTRUST, ORACLE, INTUIT, TSWP, PINTU) with minimal slippage and low fees.',
       icon: 'fas fa-exchange-alt',
       link: '/dex',
       gradient: 'from-blue-500 to-cyan-600'
@@ -48,35 +49,37 @@ const Dashboard: React.FC = () => {
         ))}
       </div>
 
-      {/* Token Supply Information */}
+      {/* Available Tokens */}
       <div className="glass-effect rounded-xl p-4 sm:p-6 border border-gray-700/50">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6 flex items-center">
           <i className="fas fa-coins text-green-400 mr-3"></i>
-          Token Supply
+          Available Tokens
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-          <div className="bg-gray-800/50 rounded-lg p-4 sm:p-6 border border-gray-600/30">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-r from-purple-500 to-blue-600 flex items-center justify-center">
-                  <TokenIcon token="ORACLE" size="lg" className="text-white" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {(Object.keys(TOKENS) as Array<keyof typeof TOKENS>).map((tokenKey) => {
+            const token = TOKENS[tokenKey]
+            return (
+              <div key={tokenKey} className="bg-gray-800/50 rounded-lg p-4 border border-gray-600/30">
+                <div className="flex items-center space-x-3 mb-3">
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-2xl">
+                    {token.icon}
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">{token.symbol}</h3>
+                    <p className="text-xs text-gray-400">{token.isNative ? 'Native Token' : 'ERC20 Token'}</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-base sm:text-lg font-bold text-white">{TOKENS.ORACLE.symbol}</h3>
-                  <p className="text-xs sm:text-sm text-gray-400">{TOKENS.ORACLE.name}</p>
+                <p className="text-sm text-gray-300 mb-3">{token.name}</p>
+                <div className="text-xs">
+                  <ContractAddressLink
+                    address={token.address}
+                    label="Contract"
+                    className="text-xs"
+                  />
                 </div>
               </div>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl sm:text-3xl font-bold text-purple-400">{parseInt(PROTOCOL_CONFIG.tokenSupply.ORACLE).toLocaleString()}</p>
-              <p className="text-xs sm:text-sm text-gray-400 mt-1">Total Supply</p>
-            </div>
-            <div className="mt-4 text-xs text-gray-500">
-              <p>Contract: {TOKENS.ORACLE.address}</p>
-            </div>
-          </div>
-          
-
+            )
+          })}
         </div>
       </div>
 

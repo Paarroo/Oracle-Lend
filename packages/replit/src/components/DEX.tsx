@@ -4,47 +4,147 @@ import { useWallet } from '../hooks/useWallet'
 import { SwapQuote } from '../types'
 import { trackTransaction, initializeAnalytics } from '../utils/analyticsTracker'
 import TokenIcon from './TokenIcon'
+import ContractAddressLink from './ContractAddressLink'
 import { ethers } from 'ethers'
 
-import { INTUITION_TESTNET } from '../utils/constants'
+import { INTUITION_TESTNET, TOKENS } from '../utils/constants'
+
+// Token type from constants
+type TokenSymbol = keyof typeof TOKENS
 
 // Contract addresses from deployment
 const CONTRACTS = {
   DEX: INTUITION_TESTNET.contracts.dex,
-  OracleToken: INTUITION_TESTNET.contracts.oracleToken
+  DEX_INTUIT: INTUITION_TESTNET.contracts.dexIntuit,
+  DEX_TSWP: INTUITION_TESTNET.contracts.dexTswp,
+  DEX_PINTU: INTUITION_TESTNET.contracts.dexPintu,
+  DEXRouter: INTUITION_TESTNET.contracts.dexRouter,
+  OracleToken: INTUITION_TESTNET.contracts.oracleToken,
+  IntuitToken: INTUITION_TESTNET.contracts.intuitToken,
+  TswpToken: INTUITION_TESTNET.contracts.tswpToken,
+  PintuToken: INTUITION_TESTNET.contracts.pintuToken
 }
 
-// AMM DEX Contract ABI - functions for the new AMM
+// Original DEX ABI for tTRUST/ORACLE pair
 const DEX_ABI = [
   'function swapTrustForOracle(uint256 _amountIn, uint256 _minAmountOut) external payable',
   'function swapOracleForTrust(uint256 _amountIn, uint256 _minAmountOut) external',
   'function getAmountOut(address _tokenIn, uint256 _amountIn) external view returns (uint256 amountOut)',
   'function getPrice(address _token) external view returns (uint256 price)',
   'function getDEXStats() external view returns (uint256 _tTrustReserve, uint256 _oracleReserve, uint256 _totalVolume, uint256 _totalTrades, uint256 _totalLiquidity)',
-  'function getAnalytics() external view returns (uint256 _totalVolume, uint256 _totalTrades, uint256 _volume24h, uint256 _trades24h, uint256 _uniqueTraders, uint256 _totalFeesCollected, uint256 _tTrustReserve, uint256 _oracleReserve)',
   'function tTrustReserve() external view returns (uint256)',
   'function oracleReserve() external view returns (uint256)',
   'function totalSupply() external view returns (uint256)',
   'function FEE_RATE() external view returns (uint256)'
 ]
 
-// Oracle Token ABI - minimal functions needed
-const ORACLE_TOKEN_ABI = [
+// Generic DEX ABI for new token pairs (INTUIT, TSWP, PINTU)
+// Based on the actual deployed contracts - they use generic names like "swapTrustForToken"
+const NEW_DEX_ABI = [
+  'function swapTrustForIntuit(uint256 _amountIn, uint256 _minAmountOut) external payable',
+  'function swapIntuitForTrust(uint256 _amountIn, uint256 _minAmountOut) external',
+  'function getAmountOut(address _tokenIn, uint256 _amountIn) external view returns (uint256 amountOut)',
+  'function getPrice(address _token) external view returns (uint256 price)',
+  'function getDEXStats() external view returns (uint256 _tTrustReserve, uint256 _intuitReserve, uint256 _totalVolume, uint256 _totalTrades, uint256 _totalLiquidity)',
+  'function tTrustReserve() external view returns (uint256)',
+  'function intuitReserve() external view returns (uint256)',
+  'function totalSupply() external view returns (uint256)',
+  'function FEE_RATE() external view returns (uint256)'
+]
+
+// Individual DEX ABIs for each token pair - they have specific function names
+const DEX_INTUIT_ABI = [
+  'function swapTrustForIntuit(uint256 _amountIn, uint256 _minAmountOut) external payable',
+  'function swapIntuitForTrust(uint256 _amountIn, uint256 _minAmountOut) external',
+  'function getAmountOut(address _tokenIn, uint256 _amountIn) external view returns (uint256 amountOut)',
+  'function getDEXStats() external view returns (uint256 _tTrustReserve, uint256 _intuitReserve, uint256 _totalVolume, uint256 _totalTrades, uint256 _totalLiquidity)'
+]
+
+const DEX_TSWP_ABI = [
+  'function swapTrustForTswp(uint256 _amountIn, uint256 _minAmountOut) external payable',
+  'function swapTswpForTrust(uint256 _amountIn, uint256 _minAmountOut) external',
+  'function getAmountOut(address _tokenIn, uint256 _amountIn) external view returns (uint256 amountOut)',
+  'function getDEXStats() external view returns (uint256 _tTrustReserve, uint256 _tswpReserve, uint256 _totalVolume, uint256 _totalTrades, uint256 _totalLiquidity)'
+]
+
+const DEX_PINTU_ABI = [
+  'function swapTrustForPintu(uint256 _amountIn, uint256 _minAmountOut) external payable',
+  'function swapPintuForTrust(uint256 _amountIn, uint256 _minAmountOut) external',
+  'function getAmountOut(address _tokenIn, uint256 _amountIn) external view returns (uint256 amountOut)',
+  'function getDEXStats() external view returns (uint256 _tTrustReserve, uint256 _pintuReserve, uint256 _totalVolume, uint256 _totalTrades, uint256 _totalLiquidity)'
+]
+
+// ERC20 Token ABI - for all tokens (ORACLE, INTUIT, TSWP, PINTU)
+const ERC20_TOKEN_ABI = [
   'function balanceOf(address account) external view returns (uint256)',
   'function approve(address spender, uint256 amount) external returns (bool)',
   'function transfer(address to, uint256 amount) external returns (bool)',
   'function allowance(address owner, address spender) external view returns (uint256)'
 ]
 
+// Utility functions to determine correct DEX contract and methods
+const getDEXContractInfo = (fromToken: TokenSymbol, toToken: TokenSymbol) => {
+  // Always ensure tTRUST is one of the tokens (all pairs are with tTRUST)
+  if (fromToken !== 'tTRUST' && toToken !== 'tTRUST') {
+    throw new Error('All swaps must include tTRUST as one of the tokens')
+  }
+
+  // Determine the non-tTRUST token
+  const otherToken = fromToken === 'tTRUST' ? toToken : fromToken
+
+  switch (otherToken) {
+    case 'ORACLE':
+      return {
+        contractAddress: CONTRACTS.DEX,
+        abi: DEX_ABI,
+        swapToTokenFunction: 'swapTrustForOracle',
+        swapFromTokenFunction: 'swapOracleForTrust',
+        tokenContract: CONTRACTS.OracleToken
+      }
+    case 'INTUIT':
+      return {
+        contractAddress: CONTRACTS.DEX_INTUIT,
+        abi: DEX_INTUIT_ABI,
+        swapToTokenFunction: 'swapTrustForIntuit',
+        swapFromTokenFunction: 'swapIntuitForTrust',
+        tokenContract: CONTRACTS.IntuitToken
+      }
+    case 'TSWP':
+      return {
+        contractAddress: CONTRACTS.DEX_TSWP,
+        abi: DEX_TSWP_ABI,
+        swapToTokenFunction: 'swapTrustForTswp',
+        swapFromTokenFunction: 'swapTswpForTrust',
+        tokenContract: CONTRACTS.TswpToken
+      }
+    case 'PINTU':
+      return {
+        contractAddress: CONTRACTS.DEX_PINTU,
+        abi: DEX_PINTU_ABI,
+        swapToTokenFunction: 'swapTrustForPintu',
+        swapFromTokenFunction: 'swapPintuForTrust',
+        tokenContract: CONTRACTS.PintuToken
+      }
+    default:
+      throw new Error(`Unsupported token: ${otherToken}`)
+  }
+}
+
 const DEX: React.FC = () => {
   const { isLoading: contractLoading } = useContract()
   const { isConnected, account, balance, isInitializing } = useWallet()
   
-  const [fromToken, setFromToken] = useState<'TTRUST' | 'ORACLE'>('TTRUST')
-  const [toToken, setToToken] = useState<'TTRUST' | 'ORACLE'>('ORACLE')
+  const [fromToken, setFromToken] = useState<TokenSymbol>('tTRUST')
+  const [toToken, setToToken] = useState<TokenSymbol>('ORACLE')
   const [fromAmount, setFromAmount] = useState('')
   const [toAmount, setToAmount] = useState('')
-  const [balances, setBalances] = useState({ TTRUST: '0', ORACLE: '0' })
+  const [balances, setBalances] = useState<Record<TokenSymbol, string>>({
+    tTRUST: '0',
+    ORACLE: '0',
+    INTUIT: '0',
+    TSWP: '0',
+    PINTU: '0'
+  })
   const [quote, setQuote] = useState<SwapQuote | null>(null)
   const [slippage, setSlippage] = useState(0.5) // Default 0.5% (min: 0.1%, max: 10% for security)
   const [showSlippageSettings, setShowSlippageSettings] = useState(false)
@@ -114,23 +214,45 @@ const DEX: React.FC = () => {
     if (!isConnected || !account || !window.ethereum || !isCorrectNetwork) {
       return
     }
-    
-    
+
+
     try {
       const provider = new ethers.BrowserProvider(window.ethereum)
-      
-      // Get native token balance (TTRUST on Intuition Testnet)
+
+      // Get native token balance (tTRUST on Intuition Testnet)
       const nativeBalance = await provider.getBalance(account)
-      
-      // Get ORACLE ERC20 token balance
-      const oracleContract = new ethers.Contract(CONTRACTS.OracleToken, ORACLE_TOKEN_ABI, provider)
-      const oracleBalance = await oracleContract.balanceOf(account)
-      
-      const formattedBalances = {
-        TTRUST: ethers.formatEther(nativeBalance), // Native token balance
-        ORACLE: ethers.formatEther(oracleBalance)  // ERC20 token balance
+
+      // Initialize all balances to 0
+      const formattedBalances: Record<TokenSymbol, string> = {
+        tTRUST: '0',
+        ORACLE: '0',
+        INTUIT: '0',
+        TSWP: '0',
+        PINTU: '0'
       }
-      
+
+      // Set native token balance
+      formattedBalances.tTRUST = ethers.formatEther(nativeBalance)
+
+      // Get ERC20 token balances for each token
+      const tokenContracts = {
+        ORACLE: CONTRACTS.OracleToken,
+        INTUIT: CONTRACTS.IntuitToken,
+        TSWP: CONTRACTS.TswpToken,
+        PINTU: CONTRACTS.PintuToken
+      }
+
+      for (const [tokenSymbol, contractAddress] of Object.entries(tokenContracts)) {
+        try {
+          const tokenContract = new ethers.Contract(contractAddress, ORACLE_TOKEN_ABI, provider)
+          const tokenBalance = await tokenContract.balanceOf(account)
+          formattedBalances[tokenSymbol as TokenSymbol] = ethers.formatEther(tokenBalance)
+        } catch (tokenError) {
+          console.error(`Failed to fetch balance for ${tokenSymbol}:`, tokenError)
+          formattedBalances[tokenSymbol as TokenSymbol] = '0'
+        }
+      }
+
       setBalances(formattedBalances)
     } catch (error) {
       console.error('Failed to fetch balances:', error)
@@ -190,7 +312,7 @@ const DEX: React.FC = () => {
         })
       }, 100)
     } else {
-      setBalances({ TTRUST: '0', ORACLE: '0' })
+      setBalances({ tTRUST: '0', ORACLE: '0', INTUIT: '0', TSWP: '0', PINTU: '0' })
       setIsCorrectNetwork(false)
     }
   }, [isConnected, account, checkNetwork])
@@ -216,7 +338,7 @@ const DEX: React.FC = () => {
     return undefined
   }, [checkNetwork])
 
-  // Get real quote from AMM DEX contract
+  // Get real quote from appropriate DEX contract
   const getQuote = async () => {
     if (!fromAmount || parseFloat(fromAmount) <= 0 || !window.ethereum || !isCorrectNetwork) {
       setToAmount('')
@@ -225,52 +347,56 @@ const DEX: React.FC = () => {
     }
 
     try {
-      const provider = new ethers.BrowserProvider(window.ethereum)
-      const dexContract = new ethers.Contract(CONTRACTS.DEX, DEX_ABI, provider)
-      
-      const inputAmount = ethers.parseEther(fromAmount)
-      
-      // TTRUST is the native token, ORACLE is our ERC20 token
-      // Since the AMM contract uses the same address for both tokens as a placeholder,
-      // we manually calculate quotes using the AMM formula (constant product with 0.3% fee)
-      let amountOut
-      
-      if (fromToken === 'TTRUST') {
-        // TTRUST (native) → ORACLE (ERC20) swap calculation
-        // Formula: (amountIn * 9970 * oracleReserve) / (tTrustReserve * 10000 + amountIn * 9970)
-        const amountInWithFee = inputAmount * BigInt(9970) // 0.3% fee = 99.7% remains
-        const numerator = amountInWithFee * ethers.parseEther(dexStats.oracleReserve)
-        const denominator = ethers.parseEther(dexStats.ethReserve) * BigInt(10000) + amountInWithFee
-        amountOut = numerator / denominator
-      } else {
-        // ORACLE (ERC20) → TTRUST (native) swap calculation  
-        // Formula: (amountIn * 9970 * tTrustReserve) / (oracleReserve * 10000 + amountIn * 9970)
-        const amountInWithFee = inputAmount * BigInt(9970) // 0.3% fee = 99.7% remains
-        const numerator = amountInWithFee * ethers.parseEther(dexStats.ethReserve)
-        const denominator = ethers.parseEther(dexStats.oracleReserve) * BigInt(10000) + amountInWithFee
-        amountOut = numerator / denominator
+      // Validate token pair (must include tTRUST)
+      if (fromToken !== 'tTRUST' && toToken !== 'tTRUST') {
+        console.error('All swaps must include tTRUST as one of the tokens')
+        setToAmount('')
+        setQuote(null)
+        return
       }
+
+      // Get the appropriate DEX contract info
+      const dexInfo = getDEXContractInfo(fromToken, toToken)
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const dexContract = new ethers.Contract(dexInfo.contractAddress, dexInfo.abi, provider)
+
+      const inputAmount = ethers.parseEther(fromAmount)
+
+      // Use the contract's getAmountOut function for accurate quotes
+      const tokenInAddress = fromToken === 'tTRUST'
+        ? TOKENS.tTRUST.address
+        : TOKENS[fromToken].address
+
+      const amountOut = await dexContract.getAmountOut(tokenInAddress, inputAmount)
       const outputAmount = ethers.formatEther(amountOut)
-      
-      // Calculate price impact based on current reserves
-      const currentRate = dexStats.currentPrice
-      const expectedOutput = fromToken === 'TTRUST' 
+
+      // Get current exchange rate for price impact calculation
+      const otherToken = fromToken === 'tTRUST' ? toToken : fromToken
+      const tokenPrices = {
+        ORACLE: dexStats.currentPrice > 0 ? dexStats.currentPrice : 500000,
+        INTUIT: 5,    // 1 tTRUST = 5 INTUIT (from config)
+        TSWP: 2.5,    // 1 tTRUST = 2.5 TSWP (from config)
+        PINTU: 0.5    // 1 tTRUST = 0.5 PINTU (from config)
+      }
+
+      const currentRate = tokenPrices[otherToken as keyof typeof tokenPrices] || 1
+      const expectedOutput = fromToken === 'tTRUST'
         ? parseFloat(fromAmount) * currentRate
         : parseFloat(fromAmount) / currentRate
-      
+
       const actualOutput = parseFloat(outputAmount)
-      const priceImpact = Math.abs((expectedOutput - actualOutput) / expectedOutput) * 100
-      
+      const priceImpact = expectedOutput > 0 ? Math.abs((expectedOutput - actualOutput) / expectedOutput) * 100 : 0
+
       setToAmount(outputAmount)
       setQuote({
         inputAmount: fromAmount,
         outputAmount: outputAmount,
         priceImpact: priceImpact,
         minimumReceived: (parseFloat(outputAmount) * (1 - slippage / 100)).toFixed(6),
-        exchangeRate: fromToken === 'TTRUST' ? dexStats.currentPrice : 1 / dexStats.currentPrice
+        exchangeRate: fromToken === 'tTRUST' ? currentRate : 1 / currentRate
       })
     } catch (error) {
-      console.error('Failed to get AMM quote:', error)
+      console.error('Failed to get quote:', error)
       setToAmount('')
       setQuote(null)
     }
@@ -296,49 +422,63 @@ const DEX: React.FC = () => {
     if (!quote || !isConnected || !account || !window.ethereum) return
 
     setIsLoading(true)
-    
+
     try {
+      // Validate token pair
+      if (fromToken !== 'tTRUST' && toToken !== 'tTRUST') {
+        throw new Error('All swaps must include tTRUST as one of the tokens')
+      }
+
+      // Get the appropriate DEX contract info
+      const dexInfo = getDEXContractInfo(fromToken, toToken)
       const provider = new ethers.BrowserProvider(window.ethereum)
       const signer = await provider.getSigner()
-      const dexContract = new ethers.Contract(CONTRACTS.DEX, DEX_ABI, signer)
-      
+      const dexContract = new ethers.Contract(dexInfo.contractAddress, dexInfo.abi, signer)
+
       const inputAmount = ethers.parseEther(fromAmount)
       const minAmountOut = ethers.parseEther(quote.minimumReceived)
-      
+
       let tx
 
-      if (fromToken === 'TTRUST') {
-        // TTRUST (native) → ORACLE (ERC20) swap
+      if (fromToken === 'tTRUST') {
+        // tTRUST → Token swap (native to ERC20)
         // Send native token via msg.value
-        tx = await dexContract.swapTrustForOracle(0, minAmountOut, {
+        const swapFunction = dexInfo.swapToTokenFunction
+        tx = await dexContract[swapFunction](0, minAmountOut, {
           value: inputAmount, // Native token sent via value
-          gasLimit: 200000
+          gasLimit: 300000
         })
       } else {
-        // ORACLE (ERC20) → TTRUST (native) swap
+        // Token → tTRUST swap (ERC20 to native)
         // First check/approve ERC20 allowance
-        const oracleContract = new ethers.Contract(CONTRACTS.OracleToken, ORACLE_TOKEN_ABI, signer)
-        const allowance = await oracleContract.allowance(account, CONTRACTS.DEX)
-        
+        const tokenContract = new ethers.Contract(dexInfo.tokenContract, ERC20_TOKEN_ABI, signer)
+        const allowance = await tokenContract.allowance(account, dexInfo.contractAddress)
+
         if (allowance < inputAmount) {
-          const approveTx = await oracleContract.approve(CONTRACTS.DEX, inputAmount)
+          console.log(`Approving ${fromToken} tokens for DEX...`)
+          const approveTx = await tokenContract.approve(dexInfo.contractAddress, inputAmount)
           await approveTx.wait()
+          console.log(`${fromToken} tokens approved successfully`)
         }
-        
+
         // Swap ERC20 for native token
-        tx = await dexContract.swapOracleForTrust(inputAmount, minAmountOut, {
-          gasLimit: 200000
+        const swapFunction = dexInfo.swapFromTokenFunction
+        tx = await dexContract[swapFunction](inputAmount, minAmountOut, {
+          gasLimit: 300000
         })
       }
 
+      console.log(`Swap transaction submitted: ${tx.hash}`)
+
       // Wait for transaction confirmation
       const receipt = await tx.wait()
-      
+      console.log(`Swap confirmed in block ${receipt.blockNumber}`)
+
       // Track swap transaction for analytics
       try {
         if (account && receipt.hash) {
           // Track volume as the TTRUST amount involved in the swap
-          const volumeTTRUST = fromToken === 'TTRUST' ? fromAmount : toAmount
+          const volumeTTRUST = fromToken === 'tTRUST' ? fromAmount : toAmount
           trackTransaction(
             receipt.hash,
             'swap',
@@ -351,21 +491,21 @@ const DEX: React.FC = () => {
       } catch (analyticsError) {
         console.error('Analytics tracking failed:', analyticsError)
       }
-      
+
       // Success notification
       if (typeof window !== 'undefined' && (window as any).showNotification) {
         (window as any).showNotification('success', `Successfully swapped ${fromAmount} ${fromToken} for ${quote.outputAmount} ${toToken}`, receipt.hash)
       }
-      
+
       // Reset form and refresh data
       setFromAmount('')
       setToAmount('')
       setQuote(null)
-      
+
       // Refresh balances and DEX stats
       await fetchBalances()
       await fetchDexStats()
-      
+
     } catch (error: any) {
       console.error('Swap error:', error)
       
@@ -383,33 +523,44 @@ const DEX: React.FC = () => {
     }
   }
 
-  const getTokenInfo = (token: 'TTRUST' | 'ORACLE') => {
-    // Calculate dynamic prices based on AMM reserves
+  const getTokenInfo = (token: TokenSymbol) => {
+    const tokenData = TOKENS[token]
+
+    // For now, simplified pricing (would need real DEX price calculation)
     const ttrustPrice = 2500 // Base TTRUST price in USD
-    const oraclePrice = dexStats.currentPrice > 0 ? ttrustPrice / dexStats.currentPrice : 0.005
-    
+    const tokenPrices: Record<TokenSymbol, number> = {
+      tTRUST: ttrustPrice,
+      ORACLE: dexStats.currentPrice > 0 ? ttrustPrice / dexStats.currentPrice : 0.005,
+      INTUIT: 0.01, // Example price
+      TSWP: 0.05,   // Example price
+      PINTU: 0.10   // Example price
+    }
+
     return {
-      TTRUST: {
-        name: 'Testnet TRUST (Native)',
-        symbol: 'TTRUST',
-        icon: '⚡',
-        price: `${ttrustPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-      },
-      ORACLE: {
-        name: 'Oracle Token (ERC20)',
-        symbol: 'ORACLE',
-        icon: <TokenIcon token="ORACLE" size="sm" />,
-        price: `${oraclePrice.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`
-      }
-    }[token]
+      name: tokenData.name,
+      symbol: tokenData.symbol,
+      icon: typeof tokenData.icon === 'string' && tokenData.icon.length <= 2 ?
+        tokenData.icon : <TokenIcon token="ORACLE" size="sm" />,
+      price: `${tokenPrices[token].toLocaleString('en-US', {
+        minimumFractionDigits: token === 'tTRUST' ? 2 : 4,
+        maximumFractionDigits: token === 'tTRUST' ? 2 : 4
+      })}`
+    }
   }
 
   // For dropdown options (text only)
-  const getTokenTextIcon = (token: 'TTRUST' | 'ORACLE') => {
-    return {
-      TTRUST: '⚡',
-      ORACLE: 'ORACLE' // Use text name for dropdown since HTML options can't contain images
-    }[token]
+  const getTokenTextIcon = (token: TokenSymbol) => {
+    const tokenData = TOKENS[token]
+    // Use emoji icons for all tokens in dropdown
+    if (typeof tokenData.icon === 'string' && tokenData.icon.length <= 2) {
+      return tokenData.icon
+    }
+    // For ORACLE with image, use eye emoji
+    if (token === 'ORACLE') {
+      return '👁️'
+    }
+    // Default to first letter
+    return tokenData.symbol.charAt(0)
   }
 
   const slippageOptions = [0.1, 0.5, 1.0, 2.0]
@@ -489,8 +640,8 @@ const DEX: React.FC = () => {
                 </button>
               </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-              {(['TTRUST', 'ORACLE'] as const).map((token) => {
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+              {(Object.keys(TOKENS) as TokenSymbol[]).map((token) => {
                 const info = getTokenInfo(token)
                 return (
                   <div key={token} className="glass-effect rounded-lg p-4 border border-gray-600/30">
@@ -503,12 +654,12 @@ const DEX: React.FC = () => {
                         )}
                         <div>
                           <h3 className="font-bold text-white">{info.symbol}</h3>
-                          <p className="text-sm text-gray-400">{info.name}</p>
+                          <p className="text-sm text-gray-400 truncate">{info.name}</p>
                         </div>
                       </div>
                       <div className="text-right">
                         <p className="text-lg font-bold text-white">
-                          {parseFloat(balances[token]).toFixed(4)} {token}
+                          {parseFloat(balances[token]) === 0 ? '0' : parseFloat(balances[token]).toFixed(4)} {token}
                         </p>
                       </div>
                     </div>
@@ -612,12 +763,12 @@ const DEX: React.FC = () => {
                       <div className="relative">
                         <select
                           value={fromToken}
-                          onChange={(e) => setFromToken(e.target.value as 'TTRUST' | 'ORACLE')}
-                          className="appearance-none glass-effect rounded-lg px-2 py-1 text-lg sm:text-xl text-white font-semibold cursor-pointer hover:border-cyan-400/50 transition-all duration-200 border border-purple-500/30 focus:border-cyan-400/70 outline-none min-h-[44px]"
+                          onChange={(e) => setFromToken(e.target.value as TokenSymbol)}
+                          className="appearance-none glass-effect rounded-lg pl-2 pr-10 py-1 text-lg sm:text-xl text-white font-semibold cursor-pointer hover:border-cyan-400/50 transition-all duration-200 border border-purple-500/30 focus:border-cyan-400/70 outline-none min-h-[44px]"
                         >
-                          {(['TTRUST', 'ORACLE'] as const).map((token) => (
+                          {(Object.keys(TOKENS) as TokenSymbol[]).map((token) => (
                             <option key={token} value={token} className="bg-gray-800">
-                              {token === 'ORACLE' ? '👁️ ORACLE' : `${getTokenTextIcon(token)} ${token}`}
+                              {`${getTokenTextIcon(token)} ${token}`}
                             </option>
                           ))}
                         </select>
@@ -683,12 +834,12 @@ const DEX: React.FC = () => {
                       <div className="relative">
                         <select
                           value={toToken}
-                          onChange={(e) => setToToken(e.target.value as 'TTRUST' | 'ORACLE')}
-                          className="appearance-none glass-effect rounded-lg px-2 py-1 text-lg sm:text-xl text-white font-semibold cursor-pointer hover:border-cyan-400/50 transition-all duration-200 border border-purple-500/30 focus:border-cyan-400/70 outline-none min-h-[44px]"
+                          onChange={(e) => setToToken(e.target.value as TokenSymbol)}
+                          className="appearance-none glass-effect rounded-lg pl-2 pr-10 py-1 text-lg sm:text-xl text-white font-semibold cursor-pointer hover:border-cyan-400/50 transition-all duration-200 border border-purple-500/30 focus:border-cyan-400/70 outline-none min-h-[44px]"
                         >
-                          {(['TTRUST', 'ORACLE'] as const).map((token) => (
+                          {(Object.keys(TOKENS) as TokenSymbol[]).map((token) => (
                             <option key={token} value={token} className="bg-gray-800">
-                              {token === 'ORACLE' ? '👁️ ORACLE' : `${getTokenTextIcon(token)} ${token}`}
+                              {`${getTokenTextIcon(token)} ${token}`}
                             </option>
                           ))}
                         </select>
@@ -834,11 +985,85 @@ const DEX: React.FC = () => {
             </div>
           </div>
 
+          {/* Contract Information */}
+          <div className="glass-effect rounded-xl p-4 sm:p-6 border border-gray-700/50">
+            <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6 flex items-center">
+              <i className="fas fa-file-contract text-purple-400 mr-3"></i>
+              Contract Information
+            </h2>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+              <div className="space-y-4">
+                <h3 className="text-base sm:text-lg font-semibold text-white flex items-center">
+                  <i className="fas fa-exchange-alt text-blue-400 mr-2"></i>
+                  Active DEX Contract
+                </h3>
+                <div className="space-y-3">
+                  {(() => {
+                    const dexInfo = getDEXContractInfo(fromToken, toToken);
+                    const pairName = fromToken === 'tTRUST' && toToken === 'ORACLE' ? 'tTRUST/ORACLE' :
+                                   fromToken === 'tTRUST' && toToken === 'INTUIT' ? 'tTRUST/INTUIT' :
+                                   fromToken === 'tTRUST' && toToken === 'TSWP' ? 'tTRUST/TSWP' :
+                                   fromToken === 'tTRUST' && toToken === 'PINTU' ? 'tTRUST/PINTU' :
+                                   `${fromToken}/${toToken}`;
+
+                    return (
+                      <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-600/30">
+                        <div className="mb-3">
+                          <span className="text-sm text-gray-400">Trading Pair:</span>
+                          <p className="text-lg font-bold text-white">{pairName}</p>
+                        </div>
+                        <ContractAddressLink
+                          address={dexInfo.contractAddress}
+                          label="DEX Contract"
+                          className="text-sm"
+                        />
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="text-base sm:text-lg font-semibold text-white flex items-center">
+                  <i className="fas fa-coins text-green-400 mr-2"></i>
+                  Token Contracts
+                </h3>
+                <div className="space-y-3">
+                  <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-600/30">
+                    <div className="space-y-2">
+                      <ContractAddressLink
+                        address={TOKENS[fromToken].address}
+                        label={`${fromToken} Token`}
+                        className="text-sm"
+                      />
+                      <ContractAddressLink
+                        address={TOKENS[toToken].address}
+                        label={`${toToken} Token`}
+                        className="text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 p-3 bg-purple-900/20 border border-purple-500/30 rounded-lg">
+              <div className="flex items-start space-x-3">
+                <i className="fas fa-info-circle text-purple-400 mt-1"></i>
+                <div className="text-sm text-gray-300">
+                  <p className="font-medium text-purple-300 mb-1">Contract Verification</p>
+                  <p>All contracts are deployed on Intuition Testnet and verified on the explorer. Click any address to view source code, transactions, and contract details.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Discord Link */}
           <div className="text-center py-8">
-            <a 
-              href="https://discord.com/invite/0xintuition" 
-              target="_blank" 
+            <a
+              href="https://discord.com/invite/0xintuition"
+              target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center space-x-3 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-lg transition-colors duration-200 shadow-lg hover:shadow-indigo-500/25"
             >

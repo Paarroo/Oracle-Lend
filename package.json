@@ -35,6 +35,7 @@
     "hardhat:verify": "yarn workspace @se-2/hardhat verify",
     "ipfs": "yarn workspace @se-2/nextjs ipfs",
     "lint": "yarn next:lint && yarn hardhat:lint",
+    "liquidity": "yarn workspace @se-2/hardhat deploy --tags InitialLiquidity",
     "next:build": "yarn workspace @se-2/nextjs build",
     "next:check-types": "yarn workspace @se-2/nextjs check-types",
     "next:dev": "yarn workspace @se-2/nextjs dev",
@@ -61,5 +62,8 @@
   "packageManager": "yarn@3.2.3",
   "engines": {
     "node": ">=20.18.3"
+  },
+  "dependencies": {
+    "puppeteer": "^24.22.0"
   }
 }
