@@ -1,7 +1,11 @@
 import React from 'react'
+import { TOKENS } from '../utils/constants'
+
+// Token type from constants
+type TokenSymbol = keyof typeof TOKENS
 
 interface TokenIconProps {
-  token: 'tTRUST' | 'ORACLE' | 'INTUIT'
+  token: TokenSymbol
   size?: 'sm' | 'md' | 'lg' | 'xl'
   className?: string
 }
@@ -14,18 +18,10 @@ const TokenIcon: React.FC<TokenIconProps> = ({ token, size = 'md', className = '
     xl: 'w-12 h-12'
   }
 
-  if (token === 'ORACLE') {
-    return (
-      <img 
-        src="/oracle-logo.png" 
-        alt="Oracle Token" 
-        className={`${sizeClasses[size]} ${className} object-cover rounded-full`}
-      />
-    )
-  }
+  // Get icon from TOKENS constant (now all are emojis)
+  const tokenData = TOKENS[token]
+  const emoji = tokenData.icon
 
-  // For other tokens, use emoji
-  const emoji = token === 'tTRUST' ? '⚡' : '💎'
   const textSize = {
     sm: 'text-sm',
     md: 'text-base', 

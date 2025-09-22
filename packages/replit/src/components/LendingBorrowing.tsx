@@ -3,7 +3,10 @@ import { useContract } from '../hooks/useContract'
 import { useWallet } from '../hooks/useWallet'
 import TokenIcon from './TokenIcon'
 import LiquidationExplainer from './LiquidationExplainer'
-import { PROTOCOL_CONFIG, LENDING_CONFIG } from '../utils/constants'
+import { PROTOCOL_CONFIG, LENDING_CONFIG, TOKENS } from '../utils/constants'
+
+// Token type from constants
+type TokenSymbol = keyof typeof TOKENS
 
 const LendingBorrowing: React.FC = () => {
   const { 
@@ -27,7 +30,14 @@ const LendingBorrowing: React.FC = () => {
   const [showLiquidationExplainer, setShowLiquidationExplainer] = useState(false)
   const [showLiquidationInfo, setShowLiquidationInfo] = useState(false)
 
+  // Token selection states
+  const [collateralToken, setCollateralToken] = useState<TokenSymbol>('tTRUST')
+  const [borrowToken, setBorrowToken] = useState<TokenSymbol>('ORACLE')
+
   const isConnected = walletConnected && contractConnected
+
+  // Helper function to get token display info
+  const getTokenInfo = (token: TokenSymbol) => TOKENS[token]
 
   // Initialize contracts when wallet connects
   useEffect(() => {
@@ -210,13 +220,13 @@ const LendingBorrowing: React.FC = () => {
         {/* Header */}
         <div className="text-center mb-6 sm:mb-8">
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold gradient-text mb-3 sm:mb-4">Oracle Lend Protocol</h1>
-          <p className="text-gray-300 text-sm sm:text-base lg:text-lg px-4 sm:px-0">Over-collateralized lending with tTRUST collateral and ORACLE borrowing</p>
+          <p className="text-gray-300 text-sm sm:text-base lg:text-lg px-4 sm:px-0">Over-collateralized lending with multi-token support</p>
         </div>
 
         {/* Protocol Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
           <div className="glass-effect border border-gray-700/50 rounded-xl p-4 sm:p-6">
-            <h3 className="text-white font-semibold mb-2">Available ORACLE</h3>
+            <h3 className="text-white font-semibold mb-2">Available {borrowToken}</h3>
             <p className="text-xl sm:text-2xl font-bold text-purple-400">
               {formatAmount((parseFloat(protocolStats.oracleBalance) / 1e18).toString())}
             </p>
@@ -239,23 +249,23 @@ const LendingBorrowing: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                     <div>
               <h3 className="text-white font-semibold mb-2 flex items-center">
-                <TokenIcon token="tTRUST" className="w-5 h-5 mr-2" />
-                TTRUST Collateral
+                <TokenIcon token={collateralToken} className="w-5 h-5 mr-2" />
+                {collateralToken} Collateral
               </h3>
               <p className="text-2xl font-bold text-blue-400">
-                {formatAmount((parseFloat(userLendingPosition.collateral) / 1e18).toString())} TTRUST
+                {formatAmount((parseFloat(userLendingPosition.collateral) / 1e18).toString())} {collateralToken}
               </p>
               <p className="text-sm text-gray-400">
-                Value: {formatAmount((parseFloat(userLendingPosition.collateralValue) / 1e18).toString())} ORACLE
+                Value: {formatAmount((parseFloat(userLendingPosition.collateralValue) / 1e18).toString())} {borrowToken}
               </p>
                     </div>
                     <div>
               <h3 className="text-white font-semibold mb-2 flex items-center">
-                <TokenIcon token="ORACLE" className="w-5 h-5 mr-2" />
-                ORACLE Debt
+                <TokenIcon token={borrowToken} className="w-5 h-5 mr-2" />
+                {borrowToken} Debt
               </h3>
               <p className="text-2xl font-bold text-red-400">
-                {formatAmount((parseFloat(userLendingPosition.borrowed) / 1e18).toString())} ORACLE
+                {formatAmount((parseFloat(userLendingPosition.borrowed) / 1e18).toString())} {borrowToken}
               </p>
                     </div>
                     <div>
@@ -281,7 +291,7 @@ const LendingBorrowing: React.FC = () => {
                     : 'glass-effect text-gray-300 hover:border-gray-500/50 border border-gray-600/30'
                 }`}
               >
-                TTRUST Collateral
+                {getTokenInfo(collateralToken).icon} {collateralToken} Collateral
               </button>
               <button
                 onClick={() => setActiveTab('borrow')}
@@ -291,15 +301,36 @@ const LendingBorrowing: React.FC = () => {
                     : 'glass-effect text-gray-300 hover:border-gray-500/50 border border-gray-600/30'
                 }`}
               >
-                ORACLE Borrowing
+                {getTokenInfo(borrowToken).icon} {borrowToken} Borrowing
               </button>
 
             </div>
 
             {activeTab === 'collateral' && (
               <div className="space-y-4">
-                <h3 className="text-xl font-bold text-white">TTRUST Collateral Management</h3>
-                
+                <h3 className="text-xl font-bold text-white">Collateral Management</h3>
+
+                {/* Collateral Token Selector */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Collateral Token
+                  </label>
+                  <select
+                    value={collateralToken}
+                    onChange={(e) => setCollateralToken(e.target.value as TokenSymbol)}
+                    className="w-full px-4 py-3 glass-effect border border-gray-600/50 rounded-lg text-white bg-gray-800/50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {(Object.keys(TOKENS) as TokenSymbol[]).map((token) => {
+                      const tokenInfo = getTokenInfo(token)
+                      return (
+                        <option key={token} value={token} className="bg-gray-800">
+                          {tokenInfo.icon} {token} - {tokenInfo.name}
+                        </option>
+                      )
+                    })}
+                  </select>
+                </div>
+
                 <div className="flex space-x-2 mb-4">
                         <button
                     onClick={() => setAction('addCollateral')}
@@ -325,7 +356,7 @@ const LendingBorrowing: React.FC = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Amount (TTRUST)
+                    Amount ({collateralToken})
                   </label>
                   <input
                     type="number"
@@ -342,9 +373,9 @@ const LendingBorrowing: React.FC = () => {
                     className="w-full px-4 py-3 glass-effect border border-gray-600/50 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   <div className="flex justify-between text-sm text-gray-400 mt-1">
-                    <span>Balance: {formatAmount(balance)} TTRUST</span>
+                    <span>Balance: {formatAmount(balance)} {collateralToken}</span>
                     {action === 'withdrawCollateral' && (
-                      <span>Max: {formatAmount((parseFloat(userLendingPosition.collateral) / 1e18).toString())} TTRUST</span>
+                      <span>Max: {formatAmount((parseFloat(userLendingPosition.collateral) / 1e18).toString())} {collateralToken}</span>
                     )}
                   </div>
                   
@@ -401,8 +432,29 @@ const LendingBorrowing: React.FC = () => {
 
             {activeTab === 'borrow' && (
               <div className="space-y-4">
-                <h3 className="text-xl font-bold text-white">ORACLE Token Borrowing</h3>
-                
+                <h3 className="text-xl font-bold text-white">Token Borrowing</h3>
+
+                {/* Borrow Token Selector */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Borrow Token
+                  </label>
+                  <select
+                    value={borrowToken}
+                    onChange={(e) => setBorrowToken(e.target.value as TokenSymbol)}
+                    className="w-full px-4 py-3 glass-effect border border-gray-600/50 rounded-lg text-white bg-gray-800/50 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    {(Object.keys(TOKENS) as TokenSymbol[]).map((token) => {
+                      const tokenInfo = getTokenInfo(token)
+                      return (
+                        <option key={token} value={token} className="bg-gray-800">
+                          {tokenInfo.icon} {token} - {tokenInfo.name}
+                        </option>
+                      )
+                    })}
+                  </select>
+                </div>
+
                 <div className="flex space-x-2 mb-4">
                     <button
                     onClick={() => setAction('borrowOracle')}
@@ -412,7 +464,7 @@ const LendingBorrowing: React.FC = () => {
                         : 'glass-effect text-gray-300 border border-gray-600/30'
                     }`}
                   >
-                    Borrow ORACLE
+                    Borrow {borrowToken}
                     </button>
                     <button
                     onClick={() => setAction('repayOracle')}
@@ -422,13 +474,13 @@ const LendingBorrowing: React.FC = () => {
                         : 'glass-effect text-gray-300 border border-gray-600/30'
                     }`}
                   >
-                    Repay ORACLE
+                    Repay {borrowToken}
                     </button>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Amount (ORACLE)
+                    Amount ({borrowToken})
                   </label>
                     <input
                       type="number"
@@ -446,10 +498,10 @@ const LendingBorrowing: React.FC = () => {
                   />
                   <div className="flex justify-between text-sm text-gray-400 mt-1">
                     {action === 'borrowOracle' && (
-                      <span>Max Borrow: {formatAmount((parseFloat(userLendingPosition.collateralValue) * 100 / PROTOCOL_CONFIG.collateralRatio / 1e18 - parseFloat(userLendingPosition.borrowed) / 1e18).toString())} ORACLE</span>
+                      <span>Max Borrow: {formatAmount((parseFloat(userLendingPosition.collateralValue) * 100 / PROTOCOL_CONFIG.collateralRatio / 1e18 - parseFloat(userLendingPosition.borrowed) / 1e18).toString())} {borrowToken}</span>
                     )}
                     {action === 'repayOracle' && (
-                      <span>Debt: {formatAmount((parseFloat(userLendingPosition.borrowed) / 1e18).toString())} ORACLE</span>
+                      <span>Debt: {formatAmount((parseFloat(userLendingPosition.borrowed) / 1e18).toString())} {borrowToken}</span>
                     )}
                   </div>
                   
@@ -497,9 +549,9 @@ const LendingBorrowing: React.FC = () => {
                       : 'bg-green-600 hover:bg-green-700 text-white'
                   }`}
                 >
-                  {isLoading ? 'Processing...' : 
-                   !isConnected ? 'Connect Wallet' : 
-                   action === 'borrowOracle' ? 'Borrow ORACLE' : 'Repay ORACLE'}
+                  {isLoading ? 'Processing...' :
+                   !isConnected ? 'Connect Wallet' :
+                   action === 'borrowOracle' ? `Borrow ${borrowToken}` : `Repay ${borrowToken}`}
                 </button>
               </div>
             )}

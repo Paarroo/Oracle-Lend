@@ -1,3 +1,6 @@
+// ✅ Restored from shared config temporarily for stability
+// TODO: Implement proper shared constants with Yarn workspace resolution
+
 // Intuition testnet configuration
 export const INTUITION_TESTNET = {
   chainId: 13579,
@@ -11,17 +14,26 @@ export const INTUITION_TESTNET = {
     decimals: 18,
   },
   contracts: {
-    // ✅ WORKING: Real Intuition testnet addresses with liquidity and funding
+    // ✅ PRODUCTION: Real Intuition testnet addresses with liquidity and funding
     oracleLend: '0x552948CC80f3D757E4c18a702F5DdD42a06E7039', // OracleLend contract (5M ORACLE funded)
     oracleToken: '0x1AA6ad0A70Dd90796F2936BD11F0d4DEF7553b04', // OracleToken contract (10M supply)
     dex: '0x216cCe003Be533D11Fd4B6d87F066Eef48B42568', // DEX contract (10 TTRUST + 5M ORACLE liquidity)
     tTrustToken: '0x0000000000000000000000000000000000000000', // Native TTRUST
-    intuintToken: '0x3Aa5ebB10DC797CAC828524e59A333d0A371443c', 
 
+    // ✅ DEPLOYED: New tokens on Intuition Testnet
+    intuitToken: '0xD8a5a9b31c3C0232E196d518E89Fd8bF83AcAd43', // INTUIT Token (100M supply)
+    tswpToken: '0xDC11f7E700A4c898AE5CAddB1082cFfa76512aDD', // TSWP Token (50M supply)
+    pintuToken: '0x51A1ceB83B83F1985a81C295d1fF28Afef186E02', // PINTU Token (10M supply)
+
+    // ✅ DEPLOYED: New DEX contracts for token pairs
+    dexIntuit: '0x36b58F5C1969B7b6591D752ea6F5486D069010AB', // DEX_INTUIT (tTRUST/INTUIT)
+    dexTswp: '0x8198f5d8F8CfFE8f9C413d98a0A55aEB8ab9FbB7', // DEX_TSWP (tTRUST/TSWP)
+    dexPintu: '0x0355B7B8cb128fA5692729Ab3AAa199C1753f726', // DEX_PINTU (tTRUST/PINTU)
+    dexRouter: '0x9A676e781A523b5d0C0e43731313A708CB607508', // DEXRouter for multi-hop
   }
-}
+} as const
 
-// Token information
+// Token information - centralized from shared-constants.ts
 export const TOKENS = {
   tTRUST: {
     symbol: 'tTRUST',
@@ -34,20 +46,38 @@ export const TOKENS = {
   },
   ORACLE: {
     symbol: 'ORACLE',
-    name: 'Oracle Token (ERC20)',
+    name: 'Oracle Token',
     address: INTUITION_TESTNET.contracts.oracleToken, // Our deployed ERC20 contract
     decimals: 18,
-    icon: 'oracle-logo.png',
+    icon: '🔮',
     color: '#8B5CF6',
     isNative: false // This is our custom ERC20 token
   },
   INTUIT: {
     symbol: 'INTUIT',
-    name: 'INTUIT',
-    address: INTUITION_TESTNET.contracts.intuintToken,
+    name: 'INTUIT Token',
+    address: INTUITION_TESTNET.contracts.intuitToken,
+    decimals: 18,
+    icon: '🧠',
+    color: '#06B6D4',
+    isNative: false
+  },
+  TSWP: {
+    symbol: 'TSWP',
+    name: 'TSWP Token (Governance)',
+    address: INTUITION_TESTNET.contracts.tswpToken,
+    decimals: 18,
+    icon: '🗳️',
+    color: '#10B981',
+    isNative: false
+  },
+  PINTU: {
+    symbol: 'PINTU',
+    name: 'PINTU Token (Staking)',
+    address: INTUITION_TESTNET.contracts.pintuToken,
     decimals: 18,
     icon: '💎',
-    color: '#06B6D4',
+    color: '#F59E0B',
     isNative: false
   }
 } as const

@@ -177,48 +177,48 @@ const Analytics: React.FC = () => {
 
   const mainMetrics = [
     {
-      title: 'Current Price',
-      value: `1 TTRUST = ${formatCurrency(currentPriceNum.toString())} ORACLE`,
+      title: 'Primary Pool Price',
+      value: `1 tTRUST = ${formatCurrency(currentPriceNum.toString())} ORACLE`,
       change: null,
       icon: 'fas fa-chart-line',
       color: 'text-green-400',
-      subtitle: `1 ORACLE = ${formatSmartPrecision(1 / currentPriceNum)} TTRUST`
+      subtitle: `Main trading pair (tTRUST/ORACLE)`
     },
     {
-      title: 'DEX Liquidity',
-      value: `${formatCurrency(realTimeData.dexReserves.tTRUST)} TTRUST`,
+      title: 'Main Pool Liquidity',
+      value: `${formatCurrency(realTimeData.dexReserves.tTRUST)} tTRUST`,
       change: null,
       icon: 'fas fa-exchange-alt',
       color: 'text-blue-400',
       subtitle: `${formatInteger(realTimeData.dexReserves.ORACLE)} ORACLE`
     },
     {
-      title: 'Lending Protocol',
-      value: `${formatCurrency(realTimeData.lendingStats.totalCollateral)} TTRUST`,
+      title: 'Primary Lending Pool',
+      value: `${formatCurrency(realTimeData.lendingStats.totalCollateral)} tTRUST`,
       change: null,
       icon: 'fas fa-university',
       color: 'text-purple-400',
-      subtitle: `${formatInteger(realTimeData.lendingStats.oracleBalance)} ORACLE`
+      subtitle: `${formatInteger(realTimeData.lendingStats.oracleBalance)} ORACLE available`
     }
   ]
 
   const protocolStatsData = [
     {
-      category: 'Lending Protocol',
+      category: 'Primary Lending Pool',
       stats: [
-        { label: 'TTRUST Collateral', value: `${formatCurrency(realTimeData.lendingStats.totalCollateral)} TTRUST`, icon: '⚡' },
+        { label: 'tTRUST Collateral', value: `${formatCurrency(realTimeData.lendingStats.totalCollateral)} tTRUST`, icon: '⚡' },
         { label: 'ORACLE Available', value: `${formatInteger(realTimeData.lendingStats.oracleBalance)} ORACLE`, icon: <TokenIcon token="ORACLE" size="sm" /> },
-        { label: 'Current Price', value: `${formatNumber(parseFloat(protocolStats.currentPrice) / 1e18)} ORACLE/TTRUST`, icon: '💰' },
+        { label: 'Exchange Rate', value: `${formatNumber(parseFloat(protocolStats.currentPrice) / 1e18)} ORACLE/tTRUST`, icon: '💰' },
         { label: 'Collateral Ratio', value: '120%', icon: '🛡️' }
       ]
     },
     {
-      category: 'DEX Analytics',
+      category: 'Main DEX Pool',
       stats: [
-        { label: 'TTRUST Reserve', value: `${formatCurrency(realTimeData.dexReserves.tTRUST)} TTRUST`, icon: '⚡' },
+        { label: 'tTRUST Reserve', value: `${formatCurrency(realTimeData.dexReserves.tTRUST)} tTRUST`, icon: '⚡' },
         { label: 'ORACLE Reserve', value: `${formatInteger(realTimeData.dexReserves.ORACLE)} ORACLE`, icon: <TokenIcon token="ORACLE" size="sm" /> },
-        { label: 'LP Token Supply', value: 'N/A', icon: '🔄' },
-        { label: 'Pool Health', value: 'Active', icon: '✅' }
+        { label: 'Pool Type', value: 'AMM (x*y=k)', icon: '🔄' },
+        { label: 'Pool Status', value: 'Active', icon: '✅' }
       ]
     }
   ]
@@ -293,7 +293,7 @@ const Analytics: React.FC = () => {
             <h3 className="text-base sm:text-lg font-semibold text-white">🏦 Lending Protocol</h3>
             <ul className="text-gray-300 text-xs sm:text-sm space-y-1 sm:space-y-2">
               <li>• Over-collateralized lending (120% ratio)</li>
-              <li>• TTRUST as collateral, ORACLE as borrowable asset</li>
+              <li>• Multi-token support (tTRUST, ORACLE, INTUIT, TSWP, PINTU)</li>
               <li>• 10% liquidation bonus for liquidators</li>
               <li>• Real-time price discovery via DEX</li>
             </ul>
@@ -303,9 +303,9 @@ const Analytics: React.FC = () => {
             <h3 className="text-base sm:text-lg font-semibold text-white">🔄 DEX (AMM)</h3>
             <ul className="text-gray-300 text-xs sm:text-sm space-y-1 sm:space-y-2">
               <li>• Constant product formula (x * y = k)</li>
-              <li>• TTRUST/ORACLE trading pair</li>
+              <li>• Multiple trading pairs (tTRUST/ORACLE, INTUIT, TSWP, PINTU)</li>
               <li>• Serves as price oracle for lending</li>
-              <li>• Native TTRUST integration</li>
+              <li>• Multi-token ecosystem support</li>
             </ul>
           </div>
         </div>
