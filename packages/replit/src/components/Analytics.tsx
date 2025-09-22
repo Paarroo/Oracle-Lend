@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { useContract } from '../hooks/useContract'
 import TokenIcon from './TokenIcon'
+import ContractAddressLink from './ContractAddressLink'
+import { INTUITION_TESTNET } from '../utils/constants'
 
 const Analytics: React.FC = () => {
   const { 
@@ -311,11 +313,133 @@ const Analytics: React.FC = () => {
         </div>
       </div>
 
+      {/* Protocol Contracts */}
+      <div className="glass-effect rounded-xl p-4 sm:p-6 border border-gray-700/50">
+        <h2 className="text-xl sm:text-2xl font-bold text-white mb-4 sm:mb-6 flex items-center">
+          <i className="fas fa-file-contract text-purple-400 mr-3"></i>
+          Protocol Contracts
+        </h2>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-600/30">
+            <div className="flex items-center space-x-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                <i className="fas fa-university text-green-400"></i>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Lending Protocol</h3>
+                <p className="text-xs text-gray-400">Core lending contract</p>
+              </div>
+            </div>
+            <ContractAddressLink
+              address={INTUITION_TESTNET.contracts.oracleLend}
+              label="OracleLend"
+              className="text-sm"
+            />
+          </div>
+
+          <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-600/30">
+            <div className="flex items-center space-x-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                <i className="fas fa-exchange-alt text-blue-400"></i>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Main DEX</h3>
+                <p className="text-xs text-gray-400">tTRUST/ORACLE pair</p>
+              </div>
+            </div>
+            <ContractAddressLink
+              address={INTUITION_TESTNET.contracts.dex}
+              label="DEX Contract"
+              className="text-sm"
+            />
+          </div>
+
+          <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-600/30">
+            <div className="flex items-center space-x-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                <TokenIcon token="ORACLE" size="sm" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">ORACLE Token</h3>
+                <p className="text-xs text-gray-400">Primary borrowable asset</p>
+              </div>
+            </div>
+            <ContractAddressLink
+              address={INTUITION_TESTNET.contracts.oracleToken}
+              label="Token Contract"
+              className="text-sm"
+            />
+          </div>
+
+          <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-600/30">
+            <div className="flex items-center space-x-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                <TokenIcon token="INTUIT" size="sm" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">INTUIT DEX</h3>
+                <p className="text-xs text-gray-400">tTRUST/INTUIT pair</p>
+              </div>
+            </div>
+            <ContractAddressLink
+              address={INTUITION_TESTNET.contracts.dexIntuit}
+              label="DEX Contract"
+              className="text-sm"
+            />
+          </div>
+
+          <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-600/30">
+            <div className="flex items-center space-x-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                <TokenIcon token="TSWP" size="sm" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">TSWP DEX</h3>
+                <p className="text-xs text-gray-400">tTRUST/TSWP pair</p>
+              </div>
+            </div>
+            <ContractAddressLink
+              address={INTUITION_TESTNET.contracts.dexTswp}
+              label="DEX Contract"
+              className="text-sm"
+            />
+          </div>
+
+          <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-600/30">
+            <div className="flex items-center space-x-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-pink-500/20 flex items-center justify-center">
+                <TokenIcon token="PINTU" size="sm" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">PINTU DEX</h3>
+                <p className="text-xs text-gray-400">tTRUST/PINTU pair</p>
+              </div>
+            </div>
+            <ContractAddressLink
+              address={INTUITION_TESTNET.contracts.dexPintu}
+              label="DEX Contract"
+              className="text-sm"
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 p-3 bg-purple-900/20 border border-purple-500/30 rounded-lg">
+          <div className="flex items-start space-x-3">
+            <i className="fas fa-shield-alt text-purple-400 mt-1"></i>
+            <div className="text-sm text-gray-300">
+              <p className="font-medium text-purple-300 mb-1">Security & Verification</p>
+              <p>All protocol contracts are deployed on Intuition Testnet with full source code verification. Click any address to explore contract details, transactions, and interact directly with the blockchain.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Discord Link */}
       <div className="text-center py-8">
-        <a 
-          href="https://discord.com/invite/0xintuition" 
-          target="_blank" 
+        <a
+          href="https://discord.com/invite/0xintuition"
+          target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center space-x-2 sm:space-x-3 px-4 sm:px-6 py-2 sm:py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-sm sm:text-base font-medium rounded-lg transition-colors duration-200 shadow-lg hover:shadow-indigo-500/25 min-h-[44px]"
         >

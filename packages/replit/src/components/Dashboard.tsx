@@ -2,6 +2,7 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 import { PROTOCOL_CONFIG, TOKENS } from '../utils/constants'
 import TokenIcon from './TokenIcon'
+import ContractAddressLink from './ContractAddressLink'
 
 const Dashboard: React.FC = () => {
   const features = [
@@ -69,8 +70,12 @@ const Dashboard: React.FC = () => {
                   </div>
                 </div>
                 <p className="text-sm text-gray-300 mb-3">{token.name}</p>
-                <div className="text-xs text-gray-500">
-                  <p className="truncate">Contract: {token.address === '0x0000000000000000000000000000000000000000' ? 'Native' : `${token.address.slice(0, 10)}...`}</p>
+                <div className="text-xs">
+                  <ContractAddressLink
+                    address={token.address}
+                    label="Contract"
+                    className="text-xs"
+                  />
                 </div>
               </div>
             )
